@@ -1,0 +1,24 @@
+[
+  {
+    "id": "5099d63a-5a0c-4ae5-b113-f9e2f0e83ee2",
+    "email": "admin@botsaham.com",
+    "name": "System Admin",
+    "role": "admin",
+    "passwordHash": "$2a$12$Zs78KG4qp4kdYM8V0hUgEu7paO5bIzExtklBM5yb1H6z32Mx9tmpa",
+    "isActive": true,
+    "createdAt": "2026-06-01T02:52:10.883Z",
+    "updatedAt": "2026-06-01T02:52:10.883Z",
+    "lastLoginAt": "2026-06-01T07:48:53.327Z"
+  },
+  {
+    "id": "8b0e0b64-400e-46bd-abd7-1c87a5b586fd",
+    "email": "trader@botsaham.com",
+    "name": "Demo Trader",
+    "role": "user",
+    "passwordHash": "$2a$12$HGgEp6ThJ.JY4NEwUzcQUuYNmtDP45newfX8QNA1ulmYkUhVDVRP6",
+    "isActive": true,
+    "createdAt": "2026-06-01T02:52:10.883Z",
+    "updatedAt": "2026-06-01T02:52:10.883Z",
+    "lastLoginAt": null
+  }
+]

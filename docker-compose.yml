@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: bot-saham-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: bot_saham
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bot_saham"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: bot-saham-server
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/bot_saham
+      PORT: 3001
+      CLIENT_URL: http://localhost:8080
+      JWT_SECRET: docker_jwt_secret_key_98723498234
+      JWT_REFRESH_SECRET: docker_jwt_refresh_secret_key_12398712398
+      JWT_EXPIRY: 15m
+      JWT_REFRESH_EXPIRY: 7d
+      SESSION_COOKIE_NAME: bot_saham_session
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "node dist/db/migrate.js && node dist/db/seed.js && npm run start"
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: bot-saham-client
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+
+volumes:
+  pgdata:
+    driver: local
