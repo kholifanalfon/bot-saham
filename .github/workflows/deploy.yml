@@ -1,0 +1,80 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # JOB 1: CI — Lint & Build (semua PR dan push ke main)
+  # ─────────────────────────────────────────────────────────────
+  ci:
+    name: 🔍 Lint & Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck & Build Server
+        run: npm run build:server
+
+      - name: Typecheck & Build Client
+        env:
+          VITE_BASE_PATH: ${{ secrets.VITE_BASE_PATH || '/' }}
+        run: npm run build:client
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2: CD — Deploy ke Server (hanya saat push ke main/master)
+  # ─────────────────────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd ${{ secrets.APP_DIR || '~/bot-saham' }}
+
+            echo "📥 Pulling latest code..."
+            git pull origin ${{ github.ref_name }}
+
+            echo "🚀 Running deploy script..."
+            bash deploy.sh
+
+            echo "✅ Deployment selesai!"
+
+      - name: Notify Deployment Status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Deployment ke production berhasil!"
+          else
+            echo "❌ Deployment gagal!"
+          fi

@@ -21,8 +21,11 @@ import { DataFetchReport } from './pages/DataFetchReport';
 import './styles/globals.css';
 
 export const App: React.FC = () => {
+  // BASE_URL diset otomatis oleh Vite dari VITE_BASE_PATH di .env
+  const basename = import.meta.env.BASE_URL
+
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />

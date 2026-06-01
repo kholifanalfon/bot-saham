@@ -18,14 +18,31 @@ import watchlistRoutes from './routes/watchlist.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+
+// Dukung banyak origin: pisahkan dengan koma di CLIENT_URLS
+// Contoh .env: CLIENT_URLS=http://localhost:5173,http://localhost,http://127.0.0.1
+const rawOrigins = process.env.CLIENT_URLS || process.env.CLIENT_URL || 'http://localhost:5173';
+const allowedOrigins = rawOrigins.split(',').map((o) => o.trim()).filter(Boolean);
+
+console.log('[CORS] Allowed origins:', allowedOrigins);
 
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin: (requestOrigin, callback) => {
+      // Izinkan request tanpa origin (misal: curl, Postman, mobile apps)
+      if (!requestOrigin) return callback(null, true);
+
+      if (allowedOrigins.includes(requestOrigin)) {
+        return callback(null, requestOrigin);
+      }
+
+      console.warn(`[CORS] Blocked origin: ${requestOrigin}`);
+      return callback(new Error(`CORS: origin '${requestOrigin}' tidak diizinkan`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+    optionsSuccessStatus: 204,
   })
 );
 
