@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import { useStockStore } from "../store/useStockStore";
 import { useLanguageStore } from "../store/useLanguageStore";
 import { CandlestickChart } from "../components/charts/CandlestickChart";
+import { RsiChart } from "../components/charts/RsiChart";
+import { MacdChart } from "../components/charts/MacdChart";
 
 // Seeding standard assets price database for offline baseline fallback
 const stockMetadata: Record<
@@ -43,6 +45,18 @@ export const StockDetailPage: React.FC = () => {
   const [geminiAnalysis, setGeminiAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loadingGemini, setLoadingGemini] = useState(false);
+  const [holding, setHolding] = useState<any | null>(null);
+  const [buyModalOpen, setBuyModalOpen] = useState(false);
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [buyShares, setBuyShares] = useState("100");
+  const [sellShares, setSellShares] = useState("100");
+  const [transacting, setTransacting] = useState(false);
+
+  const [showEma9, setShowEma9] = useState(false);
+  const [showEma21, setShowEma21] = useState(false);
+  const [showEma50, setShowEma50] = useState(false);
+  const [showRsi, setShowRsi] = useState(false);
+  const [showMacd, setShowMacd] = useState(false);
 
   // Responsive check
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -107,7 +121,7 @@ export const StockDetailPage: React.FC = () => {
 
         // Map backend date format to Lightweight Chart format
         const formatted = candles.map((c: any) => ({
-          time: c.date,
+          time: typeof c.date === "string" ? c.date.split(" ")[0] : c.date,
           open: c.open,
           high: c.high,
           low: c.low,
@@ -219,6 +233,99 @@ export const StockDetailPage: React.FC = () => {
     loadRealData();
   }, [activeSymbol]);
 
+  // Load user holding status for active stock symbol
+  useEffect(() => {
+    const fetchHolding = async () => {
+      try {
+        const responsePortfolio = await fetch(
+          "http://localhost:3001/api/portfolio",
+          {
+            credentials: "include",
+          },
+        );
+        if (responsePortfolio.ok) {
+          const pData = await responsePortfolio.json();
+          const userHoldings = pData.holdings || [];
+          const currentHolding = userHoldings.find((h: any) => h.symbol === activeSymbol);
+          setHolding(currentHolding || null);
+        }
+      } catch (err) {
+        console.warn("Portfolio holding fetch failed:", err);
+      }
+    };
+    fetchHolding();
+  }, [activeSymbol]);
+
+  const handleTransactionSubmit = async (e: React.FormEvent, type: "buy" | "sell") => {
+    e.preventDefault();
+    setTransacting(true);
+    const sharesValue = type === "buy" ? parseInt(buyShares) : parseInt(sellShares);
+    
+    if (type === "sell" && holding && sharesValue > holding.shares) {
+      alert(
+        language === "id"
+          ? `Gagal: Anda hanya memiliki ${holding.shares} lembar saham ini.`
+          : `Error: You only hold ${holding.shares} shares of this stock.`,
+      );
+      setTransacting(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        "http://localhost:3001/api/portfolio/transaction",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            symbol: activeSymbol,
+            type,
+            shares: sharesValue,
+            price: currentPrice,
+            date: new Date().toISOString().split("T")[0],
+          }),
+        },
+      );
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Gagal memproses transaksi");
+      }
+      
+      alert(
+        type === "buy"
+          ? language === "id"
+            ? `Berhasil membeli ${sharesValue} lembar saham ${activeSymbol}!`
+            : `Successfully bought ${sharesValue} shares of ${activeSymbol}!`
+          : language === "id"
+            ? `Berhasil menjual ${sharesValue} lembar saham ${activeSymbol}!`
+            : `Successfully sold ${sharesValue} shares of ${activeSymbol}!`,
+      );
+
+      // Close modals
+      setBuyModalOpen(false);
+      setSellModalOpen(false);
+
+      // Refresh portfolio holdings
+      const responsePortfolio = await fetch(
+        "http://localhost:3001/api/portfolio",
+        {
+          credentials: "include",
+        },
+      );
+      if (responsePortfolio.ok) {
+        const pData = await responsePortfolio.json();
+        const userHoldings = pData.holdings || [];
+        const currentHolding = userHoldings.find((h: any) => h.symbol === activeSymbol);
+        setHolding(currentHolding || null);
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setTransacting(false);
+    }
+  };
+
   // Pricing calculations
   const currentPrice =
     quote?.c ||
@@ -233,6 +340,58 @@ export const StockDetailPage: React.FC = () => {
           100
         : 0;
   const isProfit = percentChange >= 0;
+
+  const ema9Data = React.useMemo(() => {
+    const series = analysisResult?.allIndicators?.ema9Series;
+    if (!series || !chartData.length) return [];
+    const offset = chartData.length - series.length;
+    return series.map((val: number, idx: number) => ({
+      time: chartData[idx + offset]?.time,
+      value: val,
+    })).filter((item: any) => item.time);
+  }, [analysisResult, chartData]);
+
+  const ema21Data = React.useMemo(() => {
+    const series = analysisResult?.allIndicators?.ema21Series;
+    if (!series || !chartData.length) return [];
+    const offset = chartData.length - series.length;
+    return series.map((val: number, idx: number) => ({
+      time: chartData[idx + offset]?.time,
+      value: val,
+    })).filter((item: any) => item.time);
+  }, [analysisResult, chartData]);
+
+  const ema50Data = React.useMemo(() => {
+    const series = analysisResult?.allIndicators?.ema50Series;
+    if (!series || !chartData.length) return [];
+    const offset = chartData.length - series.length;
+    return series.map((val: number, idx: number) => ({
+      time: chartData[idx + offset]?.time,
+      value: val,
+    })).filter((item: any) => item.time);
+  }, [analysisResult, chartData]);
+
+  const rsiData = React.useMemo(() => {
+    const series = analysisResult?.allIndicators?.rsiSeries;
+    if (!series || !chartData.length) return [];
+    const offset = chartData.length - series.length;
+    return series.map((val: number, idx: number) => ({
+      time: chartData[idx + offset]?.time,
+      value: val,
+    })).filter((item: any) => item.time);
+  }, [analysisResult, chartData]);
+
+  const macdData = React.useMemo(() => {
+    const series = analysisResult?.allIndicators?.macdSeries;
+    if (!series || !chartData.length) return [];
+    const offset = chartData.length - series.length;
+    return series.map((item: any, idx: number) => ({
+      time: chartData[idx + offset]?.time,
+      macd: item.macd || 0,
+      signal: item.signal || 0,
+      histogram: item.histogram || 0,
+    })).filter((item: any) => item.time);
+  }, [analysisResult, chartData]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -292,60 +451,140 @@ export const StockDetailPage: React.FC = () => {
             >
               {activeSymbol}
             </h1>
+            {holding && holding.shares > 0 && (
+              <div
+                style={{
+                  fontSize: "0.78rem",
+                  color: "#10b981",
+                  marginTop: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  backgroundColor: "rgba(16, 185, 129, 0.08)",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                  border: "1px solid rgba(16, 185, 129, 0.15)",
+                  width: "fit-content",
+                }}
+              >
+                <span>📦</span>
+                <span>
+                  {language === "id"
+                    ? `Dimiliki: ${holding.shares} lembar (Rata-rata: Rp ${Math.round(
+                        holding.avgPrice,
+                      ).toLocaleString("id-ID")})`
+                    : `Held: ${holding.shares} shares (Avg: Rp ${Math.round(
+                        holding.avgPrice,
+                      ).toLocaleString("en-US")})`}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? "16px" : "32px", width: isMobile ? "100%" : "auto" }}>
-          <div>
-            <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
-              {t("last_price")}
-            </span>
-            <div
-              style={{
-                fontSize: "1.5rem",
-                fontWeight: 700,
-                marginTop: "2px",
-                transition: "color 0.15s ease",
-              }}
-            >
-              {currentPrice.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: isMobile ? "16px" : "32px", width: isMobile ? "100%" : "auto" }}>
+          <div style={{ display: "flex", flexDirection: "row", justifyContent: isMobile ? "space-between" : "flex-start", gap: isMobile ? "16px" : "32px", width: isMobile ? "100%" : "auto" }}>
+            <div>
+              <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
+                {t("last_price")}
+              </span>
+              <div
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: 700,
+                  marginTop: "2px",
+                  transition: "color 0.15s ease",
+                }}
+              >
+                {currentPrice.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
+                {t("daily_change")}
+              </span>
+              <div
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: 700,
+                  color: isProfit ? "#10b981" : "#ef4444",
+                  marginTop: "2px",
+                  transition: "color 0.15s ease",
+                }}
+              >
+                {isProfit ? "↑" : "↓"} {Math.abs(percentChange).toFixed(2)}%
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
+                {t("btst_score")}
+              </span>
+              <div
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: 700,
+                  color: "#3b82f6",
+                  marginTop: "2px",
+                }}
+              >
+                {analysisResult ? Math.round(analysisResult.btstScore) : 84} / 100
+              </div>
             </div>
           </div>
 
-          <div>
-            <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
-              {t("daily_change")}
-            </span>
-            <div
+          {/* Action Buttons (Buy / Sell) */}
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              alignItems: "center",
+              width: isMobile ? "100%" : "auto",
+              marginTop: isMobile ? "4px" : "0",
+            }}
+          >
+            <button
+              onClick={() => setBuyModalOpen(true)}
               style={{
-                fontSize: "1.5rem",
-                fontWeight: 700,
-                color: isProfit ? "#10b981" : "#ef4444",
-                marginTop: "2px",
-                transition: "color 0.15s ease",
+                flex: isMobile ? 1 : "initial",
+                padding: "10px 20px",
+                fontSize: "0.85rem",
+                borderRadius: "8px",
+                border: "none",
+                cursor: "pointer",
+                backgroundColor: "#10b981",
+                color: "white",
+                fontWeight: 600,
+                transition: "all 0.2s ease",
+                boxShadow: "0 4px 12px rgba(16, 185, 129, 0.2)",
               }}
             >
-              {isProfit ? "↑" : "↓"} {Math.abs(percentChange).toFixed(2)}%
-            </div>
-          </div>
-
-          <div>
-            <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
-              {t("btst_score")}
-            </span>
-            <div
-              style={{
-                fontSize: "1.5rem",
-                fontWeight: 700,
-                color: "#3b82f6",
-                marginTop: "2px",
-              }}
-            >
-              {analysisResult ? Math.round(analysisResult.btstScore) : 84} / 100
-            </div>
+              {language === "id" ? "Beli" : "Buy"}
+            </button>
+            {holding && holding.shares > 0 && (
+              <button
+                onClick={() => setSellModalOpen(true)}
+                style={{
+                  flex: isMobile ? 1 : "initial",
+                  padding: "10px 20px",
+                  fontSize: "0.85rem",
+                  borderRadius: "8px",
+                  border: "none",
+                  cursor: "pointer",
+                  backgroundColor: "#ef4444",
+                  color: "white",
+                  fontWeight: 600,
+                  transition: "all 0.2s ease",
+                  boxShadow: "0 4px 12px rgba(239, 68, 68, 0.2)",
+                }}
+              >
+                {language === "id" ? "Jual" : "Sell"}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -378,6 +617,73 @@ export const StockDetailPage: React.FC = () => {
               Interval: 1D
             </span>
           </div>
+
+          {/* Indicator toggles checklist */}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "14px",
+              padding: "10px 14px",
+              borderRadius: "8px",
+              background: "rgba(255, 255, 255, 0.03)",
+              border: "1px solid rgba(255, 255, 255, 0.06)",
+              fontSize: "0.8rem",
+              color: "#cbd5e1",
+              marginTop: "-4px",
+            }}
+          >
+            <span style={{ color: "#94a3b8", fontWeight: 500, marginRight: "4px" }}>
+              {language === "id" ? "Tampilkan Indikator:" : "Show Indicators:"}
+            </span>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+              <input 
+                type="checkbox" 
+                checked={showEma9} 
+                onChange={(e) => setShowEma9(e.target.checked)} 
+                style={{ accentColor: "#3b82f6", cursor: "pointer" }}
+              />
+              <span style={{ color: "#60a5fa", fontWeight: 600 }}>EMA 9</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+              <input 
+                type="checkbox" 
+                checked={showEma21} 
+                onChange={(e) => setShowEma21(e.target.checked)} 
+                style={{ accentColor: "#eab308", cursor: "pointer" }}
+              />
+              <span style={{ color: "#facc15", fontWeight: 600 }}>EMA 21</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+              <input 
+                type="checkbox" 
+                checked={showEma50} 
+                onChange={(e) => setShowEma50(e.target.checked)} 
+                style={{ accentColor: "#ec4899", cursor: "pointer" }}
+              />
+              <span style={{ color: "#f472b6", fontWeight: 600 }}>EMA 50</span>
+            </label>
+            <div style={{ width: "1px", height: "14px", background: "rgba(255,255,255,0.15)" }} />
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+              <input 
+                type="checkbox" 
+                checked={showRsi} 
+                onChange={(e) => setShowRsi(e.target.checked)} 
+                style={{ accentColor: "#10b981", cursor: "pointer" }}
+              />
+              <span style={{ fontWeight: 600 }}>RSI</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+              <input 
+                type="checkbox" 
+                checked={showMacd} 
+                onChange={(e) => setShowMacd(e.target.checked)} 
+                style={{ accentColor: "#10b981", cursor: "pointer" }}
+              />
+              <span style={{ fontWeight: 600 }}>MACD</span>
+            </label>
+          </div>
           {loading ? (
             <div
               style={{
@@ -401,7 +707,18 @@ export const StockDetailPage: React.FC = () => {
               Loading Real-Time Bursa Chart...
             </div>
           ) : (
-            chartData.length > 0 && <CandlestickChart data={chartData} />
+            chartData.length > 0 && (
+              <>
+                <CandlestickChart 
+                  data={chartData} 
+                  ema9Data={showEma9 ? ema9Data : []} 
+                  ema21Data={showEma21 ? ema21Data : []} 
+                  ema50Data={showEma50 ? ema50Data : []} 
+                />
+                {showRsi && rsiData.length > 0 && <RsiChart data={rsiData} />}
+                {showMacd && macdData.length > 0 && <MacdChart data={macdData} />}
+              </>
+            )
           )}
           {geminiAnalysis && (
             <div
@@ -776,6 +1093,264 @@ export const StockDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Buy Modal */}
+      {buyModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              width: "100%",
+              maxWidth: "360px",
+              padding: "24px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+            }}
+          >
+            <h3 style={{ fontSize: "1.2rem", fontWeight: 700 }}>
+              Quick Buy {activeSymbol}
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "#94a3b8" }}>
+              Harga Saat Ini:{" "}
+              <strong style={{ color: "#f8fafc" }}>
+                Rp {Math.round(currentPrice).toLocaleString("id-ID")}
+              </strong>
+            </p>
+            <form
+              onSubmit={(e) => handleTransactionSubmit(e, "buy")}
+              style={{ display: "flex", flexDirection: "column", gap: "14px" }}
+            >
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+              >
+                <label style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+                  Jumlah Lembar (Shares)
+                </label>
+                <input
+                  type="number"
+                  value={buyShares}
+                  onChange={(e) => setBuyShares(e.target.value)}
+                  required
+                  min="1"
+                  style={{
+                    padding: "8px",
+                    borderRadius: "4px",
+                    background: "rgba(0,0,0,0.3)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    color: "#fff",
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  padding: "12px",
+                  borderRadius: "6px",
+                  backgroundColor: "rgba(16, 185, 129, 0.1)",
+                  border: "1px solid rgba(16, 185, 129, 0.2)",
+                  marginTop: "2px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+                    Total Pembayaran:
+                  </span>
+                  <strong style={{ color: "#10b981", fontSize: "1.05rem" }}>
+                    Rp{" "}
+                    {(
+                      (parseInt(buyShares) || 0) * currentPrice
+                    ).toLocaleString("id-ID")}
+                  </strong>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setBuyModalOpen(false)}
+                  style={{
+                    flex: 1,
+                    padding: "8px",
+                    background: "rgba(255,255,255,0.05)",
+                    color: "#fff",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={transacting}
+                  style={{
+                    flex: 1,
+                    padding: "8px",
+                    background: "#10b981",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: transacting ? "not-allowed" : "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  {transacting ? "Memproses..." : "Beli"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sell Modal */}
+      {sellModalOpen && holding && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              width: "100%",
+              maxWidth: "360px",
+              padding: "24px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+            }}
+          >
+            <h3 style={{ fontSize: "1.2rem", fontWeight: 700 }}>
+              Quick Sell {activeSymbol}
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "#94a3b8" }}>
+              Harga Saat Ini:{" "}
+              <strong style={{ color: "#f8fafc" }}>
+                Rp {Math.round(currentPrice).toLocaleString("id-ID")}
+              </strong>
+            </p>
+            <p style={{ fontSize: "0.8rem", color: "#e2e8f0", backgroundColor: "rgba(255,255,255,0.05)", padding: "8px", borderRadius: "4px" }}>
+              Maksimum Kepemilikan: <strong>{holding.shares} lembar</strong>
+            </p>
+            <form
+              onSubmit={(e) => handleTransactionSubmit(e, "sell")}
+              style={{ display: "flex", flexDirection: "column", gap: "14px" }}
+            >
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+              >
+                <label style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+                  Jumlah Lembar (Shares)
+                </label>
+                <input
+                  type="number"
+                  value={sellShares}
+                  onChange={(e) => setSellShares(e.target.value)}
+                  required
+                  min="1"
+                  max={holding.shares}
+                  style={{
+                    padding: "8px",
+                    borderRadius: "4px",
+                    background: "rgba(0,0,0,0.3)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    color: "#fff",
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  padding: "12px",
+                  borderRadius: "6px",
+                  backgroundColor: "rgba(239, 68, 68, 0.1)",
+                  border: "1px solid rgba(239, 68, 68, 0.2)",
+                  marginTop: "2px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+                    Total Penerimaan:
+                  </span>
+                  <strong style={{ color: "#ef4444", fontSize: "1.05rem" }}>
+                    Rp{" "}
+                    {(
+                      (parseInt(sellShares) || 0) * currentPrice
+                    ).toLocaleString("id-ID")}
+                  </strong>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setSellModalOpen(false)}
+                  style={{
+                    flex: 1,
+                    padding: "8px",
+                    background: "rgba(255,255,255,0.05)",
+                    color: "#fff",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={transacting}
+                  style={{
+                    flex: 1,
+                    padding: "8px",
+                    background: "#ef4444",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: transacting ? "not-allowed" : "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  {transacting ? "Memproses..." : "Jual"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

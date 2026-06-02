@@ -28,6 +28,7 @@ async function seed() {
       { key: "sectors_api_key", value: process.env.SECTORS_API_KEY || "" },
       { key: "gemini_api_key", value: process.env.GEMINI_API_KEY || "" },
       { key: "gemini_model", value: "gemini-3.1-flash-lite" },
+      { key: "gemini_idx_indices", value: "LQ45, IDX30, SMC Liquid" },
       { key: "btst_tp_percent", value: "2.0" },
       { key: "btst_sl_percent", value: "-2.0" }
     ];

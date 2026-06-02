@@ -1,5 +1,15 @@
 import { Quote } from '../types/index.js';
 
+function formatToDateTimeString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
 export async function getHistoricalData(symbol: string, period: string = '1mo'): Promise<any[]> {
   try {
     let range = '1mo';
@@ -38,7 +48,7 @@ export async function getHistoricalData(symbol: string, period: string = '1mo'):
       if (opens[i] === null || closes[i] === null) continue;
       
       const date = new Date(timestamps[i] * 1000);
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = formatToDateTimeString(date);
 
       formattedData.push({
         date: dateString,
@@ -91,7 +101,7 @@ export async function getHistoricalData(symbol: string, period: string = '1mo'):
       const volume = Math.floor(1000000 + Math.random() * 5000000);
       
       data.push({
-        date: date.toISOString().split('T')[0],
+        date: formatToDateTimeString(date),
         open,
         high,
         low,
@@ -190,7 +200,7 @@ export async function getHistoricalDataForDates(symbol: string, startDateStr: st
       if (opens[i] === null || closes[i] === null) continue;
       
       const date = new Date(timestamps[i] * 1000);
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = formatToDateTimeString(date);
 
       formattedData.push({
         date: dateString,
@@ -221,7 +231,7 @@ export async function getHistoricalDataForDates(symbol: string, startDateStr: st
       const volume = Math.floor(1000000 + Math.random() * 5000000);
       
       data.push({
-        date: d.toISOString().split('T')[0],
+        date: formatToDateTimeString(d),
         open,
         high,
         low,

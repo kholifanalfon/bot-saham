@@ -66,7 +66,7 @@ async function migrate() {
     // 4. Create Stock Data Table with composite PK (date, symbol)
     await query(`
       CREATE TABLE IF NOT EXISTS stock_data (
-        date DATE NOT NULL,
+        date TIMESTAMP NOT NULL,
         symbol VARCHAR(20) NOT NULL,
         price NUMERIC(12, 2) NOT NULL,
         change_percent NUMERIC(6, 2) NOT NULL,

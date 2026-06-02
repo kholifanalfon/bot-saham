@@ -17,8 +17,22 @@ interface StockAnalysis {
 }
 
 export const Screener: React.FC = () => {
-  const { watchlist, setSelectedSymbol } = useStockStore();
+  const { watchlist, setSelectedSymbol, addToWatchlist, removeFromWatchlist } =
+    useStockStore();
   const { t, language } = useLanguageStore();
+
+  const handleToggleWatchlist = async (symbol: string) => {
+    try {
+      if (watchlist.includes(symbol)) {
+        await removeFromWatchlist(symbol);
+      } else {
+        await addToWatchlist(symbol);
+      }
+    } catch (err) {
+      console.error("Failed to toggle watchlist:", err);
+    }
+  };
+
   const [market, setMarket] = useState<"all" | "priority" | "idx" | "us">(
     "all",
   );
@@ -121,49 +135,74 @@ export const Screener: React.FC = () => {
         ? "Aksi untuk membuka analisis mendalam, grafik interaktif, dan evaluasi AI Gemini."
         : "Action to open deep-dive analysis, interactive charts, and Gemini AI evaluation.",
   };
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadRealScreenerData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      let url = "http://localhost:3001/api/analysis";
+      if (date) {
+        url = `http://localhost:3001/api/analysis?date=${date}`;
+      }
+      // Fetch the pre-calculated daily bursa snapshot from PostgreSQL in a single request
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error(
+          `Server returned status ${response.status}: Failed to load analysis data.`,
+        );
+      }
+      const data = await response.json();
+
+      const validResults = data.map((item: any) => ({
+        symbol: item.symbol,
+        price: item.price,
+        change: item.change,
+        score: item.score,
+        rsi: item.rsi,
+        macd: item.macdHistogram > 0 ? "Bullish Crossover" : "Consolidating",
+        volume: "1.2x Avg",
+        date: item.date,
+      }));
+
+      setScreenerStocks(validResults);
+    } catch (err: any) {
+      console.error("Error fetching dynamic bursa metrics:", err);
+      setError(err.message || "Gagal tersambung ke server backend.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch real-time bursa data & scores from backend (Yahoo Finance / Finnhub)
   useEffect(() => {
-    const loadRealScreenerData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        let url = "http://localhost:3001/api/analysis";
-        if (date) {
-          url = `http://localhost:3001/api/analysis?date=${date}`;
-        }
-        // Fetch the pre-calculated daily bursa snapshot from PostgreSQL in a single request
-        const response = await fetch(url, {
-          credentials: "include",
-        });
-        if (!response.ok) {
-          throw new Error(
-            `Server returned status ${response.status}: Failed to load analysis data.`,
-          );
-        }
-        const data = await response.json();
-
-        const validResults = data.map((item: any) => ({
-          symbol: item.symbol,
-          price: item.price,
-          change: item.change,
-          score: item.score,
-          rsi: item.rsi,
-          macd: item.macdHistogram > 0 ? "Bullish Crossover" : "Consolidating",
-          volume: "1.2x Avg",
-          date: item.date,
-        }));
-
-        setScreenerStocks(validResults);
-      } catch (err: any) {
-        console.error("Error fetching dynamic bursa metrics:", err);
-        setError(err.message || "Gagal tersambung ke server backend.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadRealScreenerData();
   }, [date]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const response = await fetch("http://localhost:3001/api/analysis/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ date }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Gagal memperbarui data dari API.");
+      }
+      alert(language === "id" ? "Berhasil memperbarui data terbaru!" : "Successfully refreshed latest data!");
+      await loadRealScreenerData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
 
   const filtered = screenerStocks
     .filter((stock) => {
@@ -262,6 +301,11 @@ export const Screener: React.FC = () => {
           }}
         >
           <style>{`
+            @keyframes spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+
             /* Glassmorphic custom styled datepicker input */
             .custom-datepicker-input {
               background: rgba(0, 0, 0, 0.3) !important;
@@ -448,6 +492,50 @@ export const Screener: React.FC = () => {
               transition: "all 0.2s ease",
             }}
           />
+
+          {/* Perbarui button */}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            style={{
+              background: "rgba(59, 130, 246, 0.15)",
+              border: "1px solid rgba(59, 130, 246, 0.3)",
+              color: "#60a5fa",
+              fontSize: "0.85rem",
+              padding: "8px 14px",
+              borderRadius: "8px",
+              cursor: (refreshing || loading) ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontWeight: 600,
+              transition: "all 0.2s ease",
+              flexShrink: 0,
+            }}
+            onMouseOver={(e) => {
+              if (!refreshing && !loading) {
+                e.currentTarget.style.background = "rgba(59, 130, 246, 0.25)";
+                e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.5)";
+                e.currentTarget.style.color = "#fff";
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!refreshing && !loading) {
+                e.currentTarget.style.background = "rgba(59, 130, 246, 0.15)";
+                e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.3)";
+                e.currentTarget.style.color = "#60a5fa";
+              }
+            }}
+            title={language === "id" ? "Perbarui Data dari API" : "Refresh Data from API"}
+          >
+            <span style={{
+              display: "inline-block",
+              animation: refreshing ? "spin 1s linear infinite" : "none",
+            }}>
+              🔄
+            </span>
+            {!isMobile && (language === "id" ? "Perbarui" : "Refresh")}
+          </button>
         </div>
       </div>
 
@@ -631,14 +719,23 @@ export const Screener: React.FC = () => {
                       >
                         {stock.symbol}
                       </span>
-                      {isPriority && (
-                        <span
-                          style={{ color: "#f59e0b", fontSize: "1.1rem" }}
-                          title="Priority Stock"
-                        >
-                          ★
-                        </span>
-                      )}
+                      <span
+                        onClick={() => handleToggleWatchlist(stock.symbol)}
+                        style={{
+                          color: isPriority ? "#f59e0b" : "#475569",
+                          fontSize: "1.15rem",
+                          cursor: "pointer",
+                          transition: "color 0.15s ease",
+                          userSelect: "none",
+                        }}
+                        title={
+                          isPriority
+                            ? "Remove from Watchlist"
+                            : "Add to Watchlist"
+                        }
+                      >
+                        {isPriority ? "★" : "☆"}
+                      </span>
                     </div>
                     <div
                       style={{
@@ -973,7 +1070,7 @@ export const Screener: React.FC = () => {
                     </span>
                   </div>
                 </th>
-                <th style={{ padding: "12px 16px" }}>
+                <th style={{ padding: "12px 16px", width: "180px" }}>
                   <div className="tooltip-container tooltip-left">
                     {t("table_action")}
                     <span
@@ -1014,18 +1111,23 @@ export const Screener: React.FC = () => {
                       }}
                     >
                       {stock.symbol}
-                      {isPriority && (
-                        <span
-                          style={{
-                            color: "#f59e0b",
-                            fontSize: "1.1rem",
-                            cursor: "help",
-                          }}
-                          title="Priority Stock"
-                        >
-                          ★
-                        </span>
-                      )}
+                      <span
+                        onClick={() => handleToggleWatchlist(stock.symbol)}
+                        style={{
+                          color: isPriority ? "#f59e0b" : "#475569",
+                          fontSize: "1.15rem",
+                          cursor: "pointer",
+                          transition: "color 0.15s ease",
+                          userSelect: "none",
+                        }}
+                        title={
+                          isPriority
+                            ? "Remove from Watchlist"
+                            : "Add to Watchlist"
+                        }
+                      >
+                        {isPriority ? "★" : "☆"}
+                      </span>
                     </td>
                     <td style={{ padding: "16px" }}>
                       {stock.price.toLocaleString(undefined, {
@@ -1124,7 +1226,13 @@ export const Screener: React.FC = () => {
                         }}
                       >
                         {stock.date
-                          ? `16:00 ${stock.symbol.endsWith(".JK") ? "WIB" : "EST"}`
+                          ? (() => {
+                              const dObj = new Date(stock.date);
+                              const hrs = String(dObj.getHours()).padStart(2, "0");
+                              const mins = String(dObj.getMinutes()).padStart(2, "0");
+                              const secs = String(dObj.getSeconds()).padStart(2, "0");
+                              return `${hrs}:${mins}:${secs} ${stock.symbol.endsWith(".JK") ? "WIB" : "EST"}`;
+                            })()
                           : ""}
                       </span>
                     </td>

@@ -102,6 +102,7 @@ async function syncStocks() {
 
   const geminiApiKey = await getSetting("gemini_api_key");
   const modelName = (await getSetting("gemini_model")) || "gemini-1.5-flash";
+  const geminiIdxIndices = (await getSetting("gemini_idx_indices")) || "LQ45, IDX30, SMC Liquid";
 
   if (!geminiApiKey) {
     console.warn(
@@ -111,7 +112,7 @@ async function syncStocks() {
   } else {
     try {
       console.log(
-        "[AI Stock Sync] Contacting Gemini AI to query latest LQ45 and US high-liquidity stock indices...",
+        "[AI Stock Sync] Contacting Gemini AI to query latest target indices and US high-liquidity stock indices...",
       );
       const genAI = new GoogleGenerativeAI(geminiApiKey);
       const model = genAI.getGenerativeModel({
@@ -119,11 +120,11 @@ async function syncStocks() {
       });
 
       const prompt = `
-        You are an expert financial registry system. Provide a list of the top best stock symbols based on their strong positive trends in the last 3 to 6 months. This list must include at least 30 high-performing constituents of the LQ45 index on the Indonesia Stock Exchange (IDX) and up to 15 high-liquidity stocks in the US stock market.
+        You are an expert financial registry system. Provide a list of the top stock symbols best suited for short-term day trading based on their strong positive trends, high volatility, and strong momentum in the last 1 to 2 weeks. This list must include at least 30 high-performing, liquid constituents of the ${geminiIdxIndices} index on the Indonesia Stock Exchange (IDX) and up to 15 high-liquidity, high-momentum stocks in the US stock market.
         
         Rules:
-        - Provide at least 30 IDX stocks showing the strongest positive trends/performance over the last 3-6 months.
-        - Provide up to 15 US stocks showing strong positive trends.
+        - Provide at least 30 IDX stocks showing the strongest positive trends/momentum over the last 1-2 weeks.
+        - Provide up to 15 US stocks showing strong positive trends/momentum over the last 1-2 weeks.
         - For IDX stocks: Ticker symbol must end in '.JK' (e.g., 'BBRI.JK', 'TLKM.JK'). Market value must be 'IDX'.
         - For US stocks: Ticker symbol must be standard US format (e.g., 'AAPL', 'NVDA'). Market value must be 'US'.
         
@@ -159,9 +160,9 @@ async function syncStocks() {
           "Gemini response parsed to an empty registry or non-array object.",
         );
       }
-      
-      const idxStocks = parsed.filter(s => s.market === 'IDX');
-      const usStocks = parsed.filter(s => s.market === 'US').slice(0, 15);
+
+      const idxStocks = parsed.filter((s) => s.market === "IDX");
+      const usStocks = parsed.filter((s) => s.market === "US").slice(0, 15);
       fetchedStocks = [...idxStocks, ...usStocks];
 
       console.log(

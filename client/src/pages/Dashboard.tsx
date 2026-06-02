@@ -264,6 +264,25 @@ export const Dashboard: React.FC = () => {
             <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
               Memuat status portofolio...
             </div>
+          ) : holdings.length === 0 ? (
+            <div
+              style={{
+                padding: "28px",
+                textAlign: "center",
+                color: "#94a3b8",
+                fontSize: "0.85rem",
+                border: "1px dashed rgba(255, 255, 255, 0.08)",
+                borderRadius: "8px",
+                backgroundColor: "rgba(255, 255, 255, 0.01)",
+                lineHeight: 1.6,
+              }}
+            >
+              📭 Belum ada posisi portofolio aktif.
+              <br />
+              <span style={{ fontSize: "0.78rem", color: "#64748b" }}>
+                Tambah saham ke portofolio untuk memantau status TP/SL secara real-time.
+              </span>
+            </div>
           ) : (
             <div
               style={{
@@ -272,278 +291,6 @@ export const Dashboard: React.FC = () => {
                 gap: "12px",
               }}
             >
-              {/* === SIMULATION EXAMPLES SECTION === */}
-              {/* Mock Card 1: TLKM.JK (Demonstrates TP Reached or TSL Active) */}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: isMobile ? "column" : "row",
-                  justifyContent: "space-between",
-                  alignItems: isMobile ? "stretch" : "center",
-                  padding: "16px",
-                  background: "rgba(16, 185, 129, 0.1)",
-                  border: "1px solid rgba(16, 185, 129, 0.3)",
-                  borderRadius: "8px",
-                  fontSize: "0.85rem",
-                  position: "relative",
-                  overflow: "hidden",
-                  gap: isMobile ? "12px" : "16px",
-                }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    right: 0,
-                    backgroundColor: "#b45309",
-                    color: "#fff",
-                    fontSize: "0.62rem",
-                    padding: "2px 10px",
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {language === "id" ? "Simulasi Contoh" : "Simulated Example"}
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                    marginTop: isMobile ? "10px" : "0",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontWeight: 700,
-                      fontSize: "1rem",
-                      color: "#10b981",
-                    }}
-                  >
-                    TLKM.JK
-                  </span>
-                  <span style={{ color: "#cbd5e1" }}>
-                    Avg: 3,850 | Curr: 3,950 | P&L: <strong>+2.60%</strong>{" "}
-                    (Peak: +3.0%)
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    width: isMobile ? "100%" : "auto",
-                    textAlign: isMobile ? "center" : "left",
-                  }}
-                >
-                  {tslEnabled ? (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: isMobile ? "column" : "row",
-                        gap: "8px",
-                        width: isMobile ? "100%" : "auto",
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: isMobile ? "block" : "inline-block",
-                          textAlign: "center",
-                          padding: "6px 12px",
-                          borderRadius: "100px",
-                          fontWeight: "bold",
-                          background: "rgba(59, 130, 246, 0.2)",
-                          color: "#60a5fa",
-                          border: "1px solid rgba(59, 130, 246, 0.4)",
-                          fontSize: "0.78rem",
-                          width: isMobile ? "100%" : "auto",
-                        }}
-                      >
-                        🚀 HOLD (RIDING - TSL ACTIVE)
-                      </span>
-                      <button
-                        style={{
-                          display: isMobile ? "block" : "inline-block",
-                          textAlign: "center",
-                          padding: "6px 12px",
-                          borderRadius: "100px",
-                          fontWeight: "bold",
-                          background: "rgba(239, 68, 68, 0.2)",
-                          color: "#f87171",
-                          border: "1px solid rgba(239, 68, 68, 0.4)",
-                          fontSize: "0.78rem",
-                          width: isMobile ? "100%" : "auto",
-                          cursor: "pointer",
-                        }}
-                        onClick={() =>
-                          alert("Simulasi: Eksekusi Jual Manual Berhasil!")
-                        }
-                      >
-                        SELL NOW (MANUAL)
-                      </button>
-                    </div>
-                  ) : (
-                    <span
-                      style={{
-                        display: isMobile ? "block" : "inline-block",
-                        textAlign: "center",
-                        padding: "6px 12px",
-                        borderRadius: "100px",
-                        fontWeight: "bold",
-                        background: "#10b981",
-                        color: "#fff",
-                        fontSize: "0.78rem",
-                        width: isMobile ? "100%" : "auto",
-                      }}
-                    >
-                      SELL NOW (TP REACHED)
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Mock Card 2: GOTO.JK (Demonstrates SL Reached or TSL Trailed Exit) */}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: isMobile ? "column" : "row",
-                  justifyContent: "space-between",
-                  alignItems: isMobile ? "stretch" : "center",
-                  padding: "16px",
-                  background: tslEnabled
-                    ? "rgba(245, 158, 11, 0.1)"
-                    : "rgba(239, 68, 68, 0.1)",
-                  border: `1px solid ${tslEnabled ? "rgba(245, 158, 11, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
-                  borderRadius: "8px",
-                  fontSize: "0.85rem",
-                  position: "relative",
-                  overflow: "hidden",
-                  gap: isMobile ? "12px" : "16px",
-                }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    right: 0,
-                    backgroundColor: "#b45309",
-                    color: "#fff",
-                    fontSize: "0.62rem",
-                    padding: "2px 10px",
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {language === "id" ? "Simulasi Contoh" : "Simulated Example"}
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                    marginTop: isMobile ? "10px" : "0",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontWeight: 700,
-                      fontSize: "1rem",
-                      color: tslEnabled ? "#f59e0b" : "#ef4444",
-                    }}
-                  >
-                    GOTO.JK
-                  </span>
-                  {tslEnabled ? (
-                    <span style={{ color: "#cbd5e1" }}>
-                      Avg: 60 | Curr: 61 | P&L: <strong>+1.66%</strong> (Turun
-                      dari Peak: +3.5%)
-                    </span>
-                  ) : (
-                    <span style={{ color: "#cbd5e1" }}>
-                      Avg: 60 | Curr: 58 | P&L: <strong>-3.33%</strong>
-                    </span>
-                  )}
-                </div>
-                <div
-                  style={{
-                    width: isMobile ? "100%" : "auto",
-                    textAlign: isMobile ? "center" : "left",
-                  }}
-                >
-                  {tslEnabled ? (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: isMobile ? "column" : "row",
-                        gap: "8px",
-                        width: isMobile ? "100%" : "auto",
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: isMobile ? "block" : "inline-block",
-                          textAlign: "center",
-                          padding: "6px 12px",
-                          borderRadius: "100px",
-                          fontWeight: "bold",
-                          background: "#f59e0b",
-                          color: "#fff",
-                          fontSize: "0.78rem",
-                          width: isMobile ? "100%" : "auto",
-                        }}
-                      >
-                        ⚠️ SELL NOW (TRAILED EXIT)
-                      </span>
-                      <button
-                        style={{
-                          display: isMobile ? "block" : "inline-block",
-                          textAlign: "center",
-                          padding: "6px 12px",
-                          borderRadius: "100px",
-                          fontWeight: "bold",
-                          background: "rgba(239, 68, 68, 0.2)",
-                          color: "#f87171",
-                          border: "1px solid rgba(239, 68, 68, 0.4)",
-                          fontSize: "0.78rem",
-                          width: isMobile ? "100%" : "auto",
-                          cursor: "pointer",
-                        }}
-                        onClick={() =>
-                          alert("Simulasi: Eksekusi Jual Manual Berhasil!")
-                        }
-                      >
-                        SELL NOW (MANUAL)
-                      </button>
-                    </div>
-                  ) : (
-                    <span
-                      style={{
-                        display: isMobile ? "block" : "inline-block",
-                        textAlign: "center",
-                        padding: "6px 12px",
-                        borderRadius: "100px",
-                        fontWeight: "bold",
-                        background: "#ef4444",
-                        color: "#fff",
-                        fontSize: "0.78rem",
-                        width: isMobile ? "100%" : "auto",
-                      }}
-                    >
-                      CUT LOSS (SL REACHED)
-                    </span>
-                  )}
-                </div>
-              </div>
-              {/* === END OF SIMULATION SECTION === */}
-
-              {holdings.length > 0 && (
-                <div
-                  style={{
-                    borderTop: "1px dashed rgba(255,255,255,0.08)",
-                    margin: "8px 0",
-                    gridColumn: "1 / -1",
-                  }}
-                ></div>
-              )}
-
               {holdings.map((h) => {
                 const isTpReached = h.pnlPercent >= tpPercent;
                 const isSlReached = h.pnlPercent <= slPercent;

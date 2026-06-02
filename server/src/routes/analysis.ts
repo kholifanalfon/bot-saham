@@ -171,7 +171,7 @@ router.get('/', async (req, res) => {
           d.date
         FROM stock_data d
         JOIN stocks s ON d.symbol = s.symbol
-        WHERE d.date >= $1 AND d.date <= $2 AND s.is_active = true
+        WHERE DATE(d.date) >= $1 AND DATE(d.date) <= $2 AND s.is_active = true
         ORDER BY d.date DESC, d.btst_score DESC
       `;
       queryParams = [startDate, endDate];
@@ -190,7 +190,7 @@ router.get('/', async (req, res) => {
           d.date
         FROM stock_data d
         JOIN stocks s ON d.symbol = s.symbol
-        WHERE d.date = $1 AND s.is_active = true
+        WHERE DATE(d.date) = $1 AND s.is_active = true
         ORDER BY d.btst_score DESC
       `;
       queryParams = [targetDate];

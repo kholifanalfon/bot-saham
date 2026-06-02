@@ -44,6 +44,9 @@ export function calculateBTSTScore(
 ): number {
   if (prices.length === 0) return 0;
   const currentPrice = prices[prices.length - 1];
+  const prevPrice = prices.length > 1 ? prices[prices.length - 2] : currentPrice;
+  const isGreenCandle = currentPrice > prevPrice;
+  const aboveEma50 = currentPrice > ema50Val;
 
   // 1. RSI Score (25%) - We want strong momentum (40-60 is ideal for breakout, oversold < 30 is potential reversal)
   let rsiScore = 50;
@@ -52,7 +55,8 @@ export function calculateBTSTScore(
   } else if (rsiVal > 65 && rsiVal <= 75) {
     rsiScore = 70; // Moderately high
   } else if (rsiVal < 30) {
-    rsiScore = 80; // Oversold bounce potential
+    // Avoid falling knife trap: only score high if we are in an uptrend (above EMA50)
+    rsiScore = aboveEma50 ? 80 : 35;
   } else if (rsiVal > 75) {
     rsiScore = 30; // Overbought, risk of pullback
   } else {
@@ -63,34 +67,39 @@ export function calculateBTSTScore(
   let macdScore = 50;
   if (macdVal) {
     const hist = macdVal.histogram || 0;
+    const macdLine = macdVal.macd || 0;
     if (hist > 0) {
-      macdScore = 85;
-      // If expanding positive histogram, extra score
-      if (macdVal.macd && macdVal.signal && macdVal.macd > macdVal.signal) {
-        macdScore = 95;
+      // Crossover above zero line is much stronger
+      if (macdLine >= 0) {
+        macdScore = (macdVal.macd && macdVal.signal && macdVal.macd > macdVal.signal) ? 95 : 85;
+      } else {
+        // Bullish crossover but below zero line (weak reversal attempt)
+        macdScore = (macdVal.macd && macdVal.signal && macdVal.macd > macdVal.signal) ? 75 : 65;
       }
     } else {
-      macdScore = 30;
+      macdScore = 20;
     }
   }
 
-  // 3. EMA Trend Score (20%) - Price should be above EMA9, EMA21, EMA50
+  // 3. EMA Trend Score (20%) - Price should be above EMA9, EMA21, EMA50 with proper alignment
   let emaScore = 50;
   const aboveEma9 = currentPrice > ema9Val;
   const aboveEma21 = currentPrice > ema21Val;
-  const aboveEma50 = currentPrice > ema50Val;
+
+  // Check if EMAs are also stacked in a bullish order
+  const isEmaBullishStack = ema9Val > ema21Val && ema21Val > ema50Val;
 
   if (aboveEma9 && aboveEma21 && aboveEma50) {
-    emaScore = 95; // Golden bullish configuration
+    emaScore = isEmaBullishStack ? 95 : 80; // Award max points only if EMAs are fully aligned in uptrend
   } else if (aboveEma9 && aboveEma21) {
-    emaScore = 80;
+    emaScore = 70;
   } else if (aboveEma9) {
-    emaScore = 60;
+    emaScore = 50;
   } else {
-    emaScore = 30; // Downtrend
+    emaScore = 20; // Downtrend
   }
 
-  // 4. Volume Confirmation Score (15%) - Current volume should be higher than recent average volume
+  // 4. Volume Confirmation Score (15%) - Current volume should be higher than recent average volume on a GREEN day
   let volumeScore = 50;
   if (volume.length > 5) {
     const currentVolume = volume[volume.length - 1];
@@ -98,9 +107,10 @@ export function calculateBTSTScore(
     const avgVolume = recentVolumes.reduce((a, b) => a + b, 0) / recentVolumes.length;
 
     if (currentVolume > avgVolume * 1.5) {
-      volumeScore = 95; // Strong volume breakout
+      // If volume spike but it's a RED candle, penalize volume score (prevent buying selloffs)
+      volumeScore = isGreenCandle ? 95 : 20;
     } else if (currentVolume > avgVolume * 1.1) {
-      volumeScore = 80;
+      volumeScore = isGreenCandle ? 80 : 40;
     } else if (currentVolume < avgVolume * 0.7) {
       volumeScore = 30;
     }
@@ -113,9 +123,11 @@ export function calculateBTSTScore(
     const positionPercent = (currentPrice - bollingerBands.lower) / bbRange;
 
     if (positionPercent <= 0.15) {
-      bbScore = 85; // Strong support bounce potential
+      // Lower band bounce: only high score if we are above EMA50 to avoid riding lower band in downtrend
+      bbScore = aboveEma50 ? 85 : 30;
     } else if (positionPercent >= 0.85) {
-      bbScore = 80; // High momentum trend riding
+      // Upper band ride: only high score if green candle to show active buying pressure
+      bbScore = isGreenCandle ? 80 : 50;
     } else {
       bbScore = 60; // Neutral range
     }

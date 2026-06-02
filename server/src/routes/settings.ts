@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import { query } from '../services/db.js';
 import { runIngestionPipeline } from '../services/ingestion.js';
+import { spawn } from 'child_process';
 
 const router = Router();
 
@@ -33,7 +34,8 @@ router.post('/', async (req, res) => {
     btst_sl_percent,
     btst_tsl_enabled,
     btst_tsl_trigger_percent,
-    btst_tsl_trail_percent
+    btst_tsl_trail_percent,
+    gemini_idx_indices
   } = req.body;
 
   try {
@@ -137,9 +139,34 @@ router.post('/', async (req, res) => {
       );
     }
 
+    if (gemini_idx_indices !== undefined) {
+      await query(
+        `INSERT INTO settings (key, value)
+         VALUES ('gemini_idx_indices', $1)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [String(gemini_idx_indices)]
+      );
+    }
+
     return res.status(200).json({ message: 'Settings updated successfully' });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Error updating settings' });
+  }
+});
+
+router.post('/sync-stocks', async (req, res) => {
+  try {
+    console.log('[Settings] Spawning stock registry sync process...');
+    // Trigger in the background so it doesn't block the HTTP request
+    const child = spawn('npm', ['run', 'db:sync-stocks'], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    child.unref();
+
+    return res.status(200).json({ message: 'Stock synchronization triggered successfully in background' });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error triggering stock sync' });
   }
 });
 
