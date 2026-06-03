@@ -171,7 +171,7 @@ router.get('/sync-stocks/stream', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    const child = spawn('npm', ['run', 'db:sync-stocks'], {
+    const child = spawn(process.execPath, [path.resolve(serverDir, 'dist/db/sync-stocks.js')], {
       cwd: serverDir
     });
 
@@ -216,7 +216,7 @@ router.post('/sync-stocks', async (req, res) => {
     const serverDir = path.resolve(__dirname, '../../');
 
     // Trigger in the background so it doesn't block the HTTP request
-    const child = spawn('npm', ['run', 'db:sync-stocks'], {
+    const child = spawn(process.execPath, [path.resolve(serverDir, 'dist/db/sync-stocks.js')], {
       cwd: serverDir,
       detached: true,
       stdio: 'ignore'

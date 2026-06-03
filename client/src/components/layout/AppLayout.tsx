@@ -511,26 +511,29 @@ export const AppLayout: React.FC = () => {
                 gap: "10px",
               }}
             >
-              <NavLink to="/priority-stocks" style={moreMenuItemStyle}>
+              <NavLink to="/priority-stocks" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
                 📌 {t("priority")}
               </NavLink>
-              <NavLink to="/notifications" style={moreMenuItemStyle}>
+              <NavLink to="/notifications" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
                 🔔 {t("notifications")}
               </NavLink>
-              <NavLink to="/guide" style={moreMenuItemStyle}>
+              <NavLink to="/guide" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
                 📖 {t("guide")}
               </NavLink>
-              <NavLink to="/algorithm" style={moreMenuItemStyle}>
+              <NavLink to="/algorithm" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
                 📈 {t("algorithm")}
               </NavLink>
-              <NavLink to="/settings" style={moreMenuItemStyle}>
+              <NavLink to="/registry" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
+                🗂️ {t("stock_registry")}
+              </NavLink>
+              <NavLink to="/settings" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
                 ⚙️ {t("settings")}
               </NavLink>
-              <NavLink to="/data-report" style={moreMenuItemStyle}>
+              <NavLink to="/data-report" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
                 📊 {t("data_fetch_report")}
               </NavLink>
               {user?.role === "admin" && (
-                <NavLink to="/users" style={moreMenuItemStyle}>
+                <NavLink to="/users" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
                   👥 {t("users")}
                 </NavLink>
               )}
