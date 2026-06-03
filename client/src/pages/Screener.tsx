@@ -191,17 +191,24 @@ export const Screener: React.FC = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const response = await fetch("http://localhost:3001/api/analysis/refresh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ date }),
-      });
+      const response = await fetch(
+        "http://localhost:3001/api/analysis/refresh",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ date }),
+        },
+      );
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || "Gagal memperbarui data dari API.");
       }
-      alert(language === "id" ? "Berhasil memperbarui data terbaru!" : "Successfully refreshed latest data!");
+      alert(
+        language === "id"
+          ? "Berhasil memperbarui data terbaru!"
+          : "Successfully refreshed latest data!",
+      );
       await loadRealScreenerData();
     } catch (err: any) {
       alert(err.message);
@@ -209,7 +216,6 @@ export const Screener: React.FC = () => {
       setRefreshing(false);
     }
   };
-
 
   const filtered = screenerStocks
     .filter((stock) => {
@@ -230,9 +236,14 @@ export const Screener: React.FC = () => {
       if (showPullbackOnly) {
         const isUptrend = stock.price > stock.ema50;
         const isRsiPullback = stock.rsi >= 30 && stock.rsi <= 48;
-        const isNearEma21 = stock.price >= stock.ema21 * 0.97 && stock.price <= stock.ema21 * 1.03;
-        const isNearEma50 = stock.price >= stock.ema50 * 0.97 && stock.price <= stock.ema50 * 1.03;
-        matchesStrategy = isUptrend && (isRsiPullback || isNearEma21 || isNearEma50);
+        const isNearEma21 =
+          stock.price >= stock.ema21 * 0.97 &&
+          stock.price <= stock.ema21 * 1.03;
+        const isNearEma50 =
+          stock.price >= stock.ema50 * 0.97 &&
+          stock.price <= stock.ema50 * 1.03;
+        matchesStrategy =
+          isUptrend && (isRsiPullback || isNearEma21 || isNearEma50);
       }
 
       return matchesSearch && matchesMarket && matchesStrategy;
@@ -245,7 +256,10 @@ export const Screener: React.FC = () => {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div
+      className="screener-container"
+      style={{ display: "flex", flexDirection: "column", gap: "24px" }}
+    >
       <div>
         <h1
           style={{ fontSize: "1.8rem", fontWeight: 700, marginBottom: "6px" }}
@@ -320,9 +334,15 @@ export const Screener: React.FC = () => {
               padding: "7px 14px",
               fontSize: "0.82rem",
               borderRadius: "8px",
-              border: "1px solid " + (showPullbackOnly ? "rgba(59, 130, 246, 0.4)" : "rgba(255, 255, 255, 0.1)"),
+              border:
+                "1px solid " +
+                (showPullbackOnly
+                  ? "rgba(59, 130, 246, 0.4)"
+                  : "rgba(255, 255, 255, 0.1)"),
               cursor: "pointer",
-              backgroundColor: showPullbackOnly ? "rgba(59, 130, 246, 0.18)" : "rgba(0,0,0,0.25)",
+              backgroundColor: showPullbackOnly
+                ? "rgba(59, 130, 246, 0.18)"
+                : "rgba(0,0,0,0.25)",
               color: showPullbackOnly ? "#60a5fa" : "#94a3b8",
               fontWeight: 600,
               display: "flex",
@@ -550,7 +570,7 @@ export const Screener: React.FC = () => {
               fontSize: "0.85rem",
               padding: "8px 14px",
               borderRadius: "8px",
-              cursor: (refreshing || loading) ? "not-allowed" : "pointer",
+              cursor: refreshing || loading ? "not-allowed" : "pointer",
               display: "flex",
               alignItems: "center",
               gap: "6px",
@@ -572,10 +592,14 @@ export const Screener: React.FC = () => {
                 e.currentTarget.style.color = "#60a5fa";
               }
             }}
-            title={language === "id" ? "Perbarui Data dari API" : "Refresh Data from API"}
+            title={
+              language === "id"
+                ? "Perbarui Data dari API"
+                : "Refresh Data from API"
+            }
           >
-            <i 
-              className={`bx bx-refresh ${refreshing ? "bx-spin" : ""}`} 
+            <i
+              className={`bx bx-refresh ${refreshing ? "bx-spin" : ""}`}
               style={{ fontSize: "1.2rem", display: "inline-block" }}
             />
             {!isMobile && (language === "id" ? "Perbarui" : "Refresh")}
@@ -584,7 +608,7 @@ export const Screener: React.FC = () => {
       </div>
 
       {/* Main Screener Content */}
-      <div className="glass-panel" style={{ padding: "24px" }}>
+      <div className="glass-panel main-screen" style={{ padding: "24px" }}>
         {loading ? (
           <div
             style={{
@@ -1272,9 +1296,18 @@ export const Screener: React.FC = () => {
                         {stock.date
                           ? (() => {
                               const dObj = new Date(stock.date);
-                              const hrs = String(dObj.getHours()).padStart(2, "0");
-                              const mins = String(dObj.getMinutes()).padStart(2, "0");
-                              const secs = String(dObj.getSeconds()).padStart(2, "0");
+                              const hrs = String(dObj.getHours()).padStart(
+                                2,
+                                "0",
+                              );
+                              const mins = String(dObj.getMinutes()).padStart(
+                                2,
+                                "0",
+                              );
+                              const secs = String(dObj.getSeconds()).padStart(
+                                2,
+                                "0",
+                              );
                               return `${hrs}:${mins}:${secs} ${stock.symbol.endsWith(".JK") ? "WIB" : "EST"}`;
                             })()
                           : ""}

@@ -20,10 +20,11 @@ export const Login: React.FC = () => {
 
     setLoading(true);
     try {
+      const isPwa = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
       const response = await fetch('http://localhost:3001/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, isPwa }),
         credentials: 'include'
       });
 

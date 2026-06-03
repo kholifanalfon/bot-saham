@@ -35,22 +35,32 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
       email: string;
       name: string;
       role: 'admin' | 'user';
+      isPwa?: boolean;
     };
     req.user = decoded;
 
     // Refresh sliding session token and cookie on interaction
+    const isPwa = !!decoded.isPwa;
     const newToken = generateToken({
       id: decoded.id,
       email: decoded.email,
       name: decoded.name,
-      role: decoded.role
+      role: decoded.role,
+      isPwa
     });
+
+    let cookieDomain = process.env.COOKIE_DOMAIN || undefined;
+    if (cookieDomain && (req.hostname === 'localhost' || req.hostname === '127.0.0.1' || req.hostname.match(/^\d+\.\d+\.\d+\.\d+$/))) {
+      cookieDomain = undefined;
+    }
+    const maxAge = isPwa ? 30 * 24 * 60 * 60 * 1000 : 15 * 60 * 1000;
 
     res.cookie(SESSION_COOKIE_NAME, newToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 15 * 60 * 1000 // 15 mins
+      secure: process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https',
+      sameSite: 'lax',
+      domain: cookieDomain,
+      maxAge
     });
 
     next();
@@ -80,22 +90,32 @@ export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction
       email: string;
       name: string;
       role: 'admin' | 'user';
+      isPwa?: boolean;
     };
     req.user = decoded;
 
     // Refresh sliding session token and cookie on interaction
+    const isPwa = !!decoded.isPwa;
     const newToken = generateToken({
       id: decoded.id,
       email: decoded.email,
       name: decoded.name,
-      role: decoded.role
+      role: decoded.role,
+      isPwa
     });
+
+    let cookieDomain = process.env.COOKIE_DOMAIN || undefined;
+    if (cookieDomain && (req.hostname === 'localhost' || req.hostname === '127.0.0.1' || req.hostname.match(/^\d+\.\d+\.\d+\.\d+$/))) {
+      cookieDomain = undefined;
+    }
+    const maxAge = isPwa ? 30 * 24 * 60 * 60 * 1000 : 15 * 60 * 1000;
 
     res.cookie(SESSION_COOKIE_NAME, newToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 15 * 60 * 1000 // 15 mins
+      secure: process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https',
+      sameSite: 'lax',
+      domain: cookieDomain,
+      maxAge
     });
 
     next();

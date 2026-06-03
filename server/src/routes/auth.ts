@@ -37,19 +37,21 @@ router.post('/register', async (req, res) => {
       role: 'user' as const
     };
 
-    const accessToken = generateToken(safeUser);
+    const isPwa = !!req.body.isPwa;
+    const accessToken = generateToken({ ...safeUser, isPwa });
 
     // Set httpOnly session cookie
     let cookieDomain = process.env.COOKIE_DOMAIN || undefined;
     if (cookieDomain && (req.hostname === 'localhost' || req.hostname === '127.0.0.1' || req.hostname.match(/^\d+\.\d+\.\d+\.\d+$/))) {
       cookieDomain = undefined;
     }
+    const maxAge = isPwa ? 30 * 24 * 60 * 60 * 1000 : 15 * 60 * 1000;
     res.cookie(SESSION_COOKIE_NAME, accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https',
       sameSite: 'lax',
       domain: cookieDomain,
-      maxAge: 15 * 60 * 1000 // 15 mins
+      maxAge
     });
 
     return res.status(201).json({ user: safeUser, token: accessToken });
@@ -65,6 +67,7 @@ router.post('/login', async (req, res) => {
   }
 
   try {
+    const { isPwa } = req.body;
     const userResult = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     if (!userResult.rowCount || userResult.rowCount === 0) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -89,18 +92,19 @@ router.post('/login', async (req, res) => {
       role: user.role as any
     };
 
-    const accessToken = generateToken(safeUser);
+    const accessToken = generateToken({ ...safeUser, isPwa: !!isPwa });
 
     let cookieDomain = process.env.COOKIE_DOMAIN || undefined;
     if (cookieDomain && (req.hostname === 'localhost' || req.hostname === '127.0.0.1' || req.hostname.match(/^\d+\.\d+\.\d+\.\d+$/))) {
       cookieDomain = undefined;
     }
+    const maxAge = isPwa ? 30 * 24 * 60 * 60 * 1000 : 15 * 60 * 1000;
     res.cookie(SESSION_COOKIE_NAME, accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https',
       sameSite: 'lax',
       domain: cookieDomain,
-      maxAge: 15 * 60 * 1000 // 15 mins
+      maxAge
     });
 
     return res.status(200).json({ user: safeUser, token: accessToken });

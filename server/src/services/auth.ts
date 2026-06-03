@@ -8,11 +8,12 @@ const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fallback_refresh_s
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '15m';
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
 
-export function generateToken(user: Partial<User>): string {
+export function generateToken(user: Partial<User> & { isPwa?: boolean }): string {
+  const expiresIn = user.isPwa ? '30d' : (process.env.JWT_EXPIRY || '15m');
   return jwt.sign(
-    { id: user.id, email: user.email, name: user.name, role: user.role },
+    { id: user.id, email: user.email, name: user.name, role: user.role, isPwa: user.isPwa },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRY as any }
+    { expiresIn: expiresIn as any }
   );
 }
 
