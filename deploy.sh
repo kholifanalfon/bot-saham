@@ -66,7 +66,7 @@ fi
 log_info "Building client (React + Vite)..."
 cd "$SCRIPT_DIR/client"
 npm install
-npm run build
+VITE_BASE_PATH="./" npm run build
 log_success "Client berhasil di-build → client/dist/"
 
 # ─── Deploy Client ke DEPLOY_PATH ────────────────────────────────────────
@@ -85,7 +85,12 @@ cd "$SCRIPT_DIR/server"
 if command -v pm2 &> /dev/null; then
   if pm2 describe bot-saham-server &> /dev/null; then
     log_info "Merestart server PM2..."
-    pm2 restart bot-saham-server
+    pm2 restart bot-saham-server || {
+      log_warn "Gagal merestart, menghapus konfigurasi lama dan mendaftarkan ulang ke PM2..."
+      pm2 delete bot-saham-server
+      pm2 start dist/index.js --name "bot-saham-server"
+      pm2 save
+    }
   else
     log_info "Memulai server PM2 untuk pertama kali..."
     pm2 start dist/index.js --name "bot-saham-server"

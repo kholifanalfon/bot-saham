@@ -23,7 +23,7 @@ import './styles/globals.css';
 
 export const App: React.FC = () => {
   // BASE_URL diset otomatis oleh Vite dari VITE_BASE_PATH di .env
-  const basename = import.meta.env.BASE_URL
+  const basename = import.meta.env.BASE_URL === './' ? '/' : import.meta.env.BASE_URL;
 
   return (
     <BrowserRouter basename={basename}>

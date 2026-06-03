@@ -12,10 +12,13 @@ const { fetch: originalFetch } = window;
 window.fetch = async (input, init) => {
   let finalInput = input;
   
+  // Use VITE_API_URL environment variable if configured, else dynamically fallback to local hostname port 3001
+  const apiBaseUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3001`;
+
   if (typeof input === "string" && input.includes("http://localhost:3001")) {
-    finalInput = input.replace("http://localhost:3001", `http://${window.location.hostname}:3001`);
+    finalInput = input.replace("http://localhost:3001", apiBaseUrl);
   } else if (input instanceof Request && input.url.includes("http://localhost:3001")) {
-    const newUrl = input.url.replace("http://localhost:3001", `http://${window.location.hostname}:3001`);
+    const newUrl = input.url.replace("http://localhost:3001", apiBaseUrl);
     finalInput = new Request(newUrl, input);
   }
 
