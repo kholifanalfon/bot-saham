@@ -40,10 +40,12 @@ router.post('/register', async (req, res) => {
     const accessToken = generateToken(safeUser);
 
     // Set httpOnly session cookie
+    const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
     res.cookie(SESSION_COOKIE_NAME, accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https',
+      sameSite: 'lax',
+      domain: cookieDomain,
       maxAge: 15 * 60 * 1000 // 15 mins
     });
 
@@ -86,10 +88,12 @@ router.post('/login', async (req, res) => {
 
     const accessToken = generateToken(safeUser);
 
+    const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
     res.cookie(SESSION_COOKIE_NAME, accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https',
+      sameSite: 'lax',
+      domain: cookieDomain,
       maxAge: 15 * 60 * 1000 // 15 mins
     });
 
