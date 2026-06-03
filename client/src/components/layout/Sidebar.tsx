@@ -30,12 +30,16 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
       width: '260px',
       backgroundColor: '#0f132e',
       borderRight: '1px solid rgba(255, 255, 255, 0.08)',
       display: 'flex',
       flexDirection: 'column',
-      height: '100vh'
+      height: '100vh',
+      zIndex: 100
     }}>
       {/* Brand Logo & Header */}
       <div style={{
@@ -64,7 +68,7 @@ export const Sidebar: React.FC = () => {
           background: 'linear-gradient(to right, #ffffff, #94a3b8)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent'
-        }}>BOT SAHAM</span>
+        }}>BOT TRADER</span>
       </div>
 
       {/* Navigation list */}
@@ -76,6 +80,7 @@ export const Sidebar: React.FC = () => {
         <NavLink to="/ai" style={navItemStyle}>{t('gemini_evaluation')}</NavLink>
         <NavLink to="/notifications" style={navItemStyle}>{t('notifications')}</NavLink>
         <NavLink to="/guide" style={navItemStyle}>{t('guide')}</NavLink>
+        <NavLink to="/registry" style={navItemStyle}>{t('stock_registry')}</NavLink>
         <NavLink to="/algorithm" style={navItemStyle}>{t('algorithm')}</NavLink>
         <NavLink to="/settings" style={navItemStyle}>{t('settings')}</NavLink>
         <NavLink to="/data-report" style={navItemStyle}>{t('data_fetch_report')}</NavLink>

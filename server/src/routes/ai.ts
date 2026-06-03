@@ -2,15 +2,26 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import { getHistoricalData } from '../services/yahoo-finance.js';
 import { performFullAnalysis } from '../services/technical-analysis.js';
-import { analyzeStock } from '../services/gemini-ai.js';
+import { analyzeStock, askChatAssistant, getMarketSentiment } from '../services/gemini-ai.js';
 import { getCompanyNews, getMarketNews } from '../services/finnhub.js';
 import { query } from '../services/db.js';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit each IP to 30 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: {
+    error: 'Too many requests from this IP, please try again after 15 minutes.'
+  }
+});
+
 router.use(requireAuth);
 
-router.post('/analyze', async (req, res) => {
+router.post('/analyze', aiLimiter, async (req, res) => {
   const { symbol, language, forceRefresh } = req.body;
   if (!symbol) {
     return res.status(400).json({ error: 'Stock symbol is required' });
@@ -54,7 +65,7 @@ router.post('/analyze', async (req, res) => {
       ema9: technicals.ema9,
       ema21: technicals.ema21,
       ema50: technicals.ema50,
-      btstScore: technicals.btstScore
+      swingScore: technicals.swingScore
     };
 
     // Fetch context for Gemini
@@ -88,6 +99,31 @@ router.post('/analyze', async (req, res) => {
     return res.status(200).json(aiResult);
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Error executing AI analysis' });
+  }
+});
+
+router.get('/market-sentiment', aiLimiter, async (req, res) => {
+  const language = (req.query.language as string) || 'id';
+  try {
+    const mktNews = await getMarketNews();
+    const sentiment = await getMarketSentiment(mktNews, language);
+    return res.status(200).json(sentiment);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error executing Market Sentiment analysis' });
+  }
+});
+
+router.post('/chat', aiLimiter, async (req, res) => {
+  const { message, history, language } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+
+  try {
+    const responseText = await askChatAssistant(message, history || [], language || 'id');
+    return res.status(200).json({ text: responseText });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error processing assistant chat message' });
   }
 });
 

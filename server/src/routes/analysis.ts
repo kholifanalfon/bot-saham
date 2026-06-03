@@ -140,7 +140,7 @@ router.get('/', async (req, res) => {
     let queryStr = `
       SELECT 
         d.symbol,
-        d.btst_score AS score,
+        d.swing_score AS score,
         d.rsi,
         d.macd_histogram AS "macdHistogram",
         d.ema9,
@@ -152,7 +152,7 @@ router.get('/', async (req, res) => {
       FROM stock_data d
       JOIN stocks s ON d.symbol = s.symbol
       WHERE d.is_active = true AND s.is_active = true
-      ORDER BY d.btst_score DESC
+      ORDER BY d.swing_score DESC
     `;
     let queryParams: any[] = [];
 
@@ -160,7 +160,7 @@ router.get('/', async (req, res) => {
       queryStr = `
         SELECT 
           d.symbol,
-          d.btst_score AS score,
+          d.swing_score AS score,
           d.rsi,
           d.macd_histogram AS "macdHistogram",
           d.ema9,
@@ -172,14 +172,14 @@ router.get('/', async (req, res) => {
         FROM stock_data d
         JOIN stocks s ON d.symbol = s.symbol
         WHERE DATE(d.date) >= $1 AND DATE(d.date) <= $2 AND s.is_active = true
-        ORDER BY d.date DESC, d.btst_score DESC
+        ORDER BY d.date DESC, d.swing_score DESC
       `;
       queryParams = [startDate, endDate];
     } else if (targetDate) {
       queryStr = `
         SELECT 
           d.symbol,
-          d.btst_score AS score,
+          d.swing_score AS score,
           d.rsi,
           d.macd_histogram AS "macdHistogram",
           d.ema9,
@@ -191,7 +191,7 @@ router.get('/', async (req, res) => {
         FROM stock_data d
         JOIN stocks s ON d.symbol = s.symbol
         WHERE DATE(d.date) = $1 AND s.is_active = true
-        ORDER BY d.btst_score DESC
+        ORDER BY d.swing_score DESC
       `;
       queryParams = [targetDate];
     }
@@ -227,8 +227,8 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    // Fetch historical data (minimum 50 bars required for accurate calculations)
-    const history = await getHistoricalData(symbol, '3mo');
+    // Fetch historical data (minimum 50 bars required for accurate calculations, 1y for EMA 200)
+    const history = await getHistoricalData(symbol, '1y');
     if (history.length < 50) {
       return res.status(400).json({
         error: 'Insufficient historical data (minimum 50 bars required for analysis)'

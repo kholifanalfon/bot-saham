@@ -14,6 +14,9 @@ interface StockAnalysis {
   macd: string;
   volume: string;
   date?: string;
+  ema9: number;
+  ema21: number;
+  ema50: number;
 }
 
 export const Screener: React.FC = () => {
@@ -36,6 +39,7 @@ export const Screener: React.FC = () => {
   const [market, setMarket] = useState<"all" | "priority" | "idx" | "us">(
     "all",
   );
+  const [showPullbackOnly, setShowPullbackOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const date = searchParams.get("date") || "";
@@ -116,8 +120,8 @@ export const Screener: React.FC = () => {
         : "Percentage price change today compared to yesterday's close.",
     score:
       language === "id"
-        ? "Skor breakout algoritmik BTST (0-100) gabungan dari RSI, MACD, EMA, Volume, dan Bollinger Bands."
-        : "Algorithmic BTST breakout momentum score (0-100) combining RSI, MACD, EMA, Volume, and Bollinger Bands.",
+        ? "Skor breakout algoritmik Swing (0-100) gabungan dari RSI, MACD, EMA, Volume, dan Bollinger Bands."
+        : "Algorithmic Swing breakout momentum score (0-100) combining RSI, MACD, EMA, Volume, and Bollinger Bands.",
     rsi:
       language === "id"
         ? "Relative Strength Index (14 hari). Nilai >70 jenuh beli (overbought), <30 jenuh jual (oversold)."
@@ -165,6 +169,9 @@ export const Screener: React.FC = () => {
         macd: item.macdHistogram > 0 ? "Bullish Crossover" : "Consolidating",
         volume: "1.2x Avg",
         date: item.date,
+        ema9: item.ema9 || 0,
+        ema21: item.ema21 || 0,
+        ema50: item.ema50 || 0,
       }));
 
       setScreenerStocks(validResults);
@@ -219,7 +226,16 @@ export const Screener: React.FC = () => {
         matchesMarket = !stock.symbol.endsWith(".JK");
       }
 
-      return matchesSearch && matchesMarket;
+      let matchesStrategy = true;
+      if (showPullbackOnly) {
+        const isUptrend = stock.price > stock.ema50;
+        const isRsiPullback = stock.rsi >= 30 && stock.rsi <= 48;
+        const isNearEma21 = stock.price >= stock.ema21 * 0.97 && stock.price <= stock.ema21 * 1.03;
+        const isNearEma50 = stock.price >= stock.ema50 * 0.97 && stock.price <= stock.ema50 * 1.03;
+        matchesStrategy = isUptrend && (isRsiPullback || isNearEma21 || isNearEma50);
+      }
+
+      return matchesSearch && matchesMarket && matchesStrategy;
     })
     .sort((a, b) => b.score - a.score);
 
@@ -253,41 +269,71 @@ export const Screener: React.FC = () => {
           gap: "16px",
         }}
       >
-        {/* Market selector tabs */}
+        {/* Market selector tabs & Strategy filters */}
         <div
           style={{
             display: "flex",
-            gap: "8px",
-            backgroundColor: "rgba(0,0,0,0.2)",
-            padding: "4px",
-            borderRadius: "8px",
+            alignItems: "center",
+            gap: "12px",
+            flexWrap: "wrap",
           }}
         >
-          {(["all", "priority", "idx", "us"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMarket(m)}
-              style={{
-                padding: "6px 14px",
-                fontSize: "0.82rem",
-                borderRadius: "6px",
-                border: "none",
-                cursor: "pointer",
-                backgroundColor: market === m ? "#3b82f6" : "transparent",
-                color: market === m ? "white" : "#94a3b8",
-                fontWeight: 600,
-                transition: "all 0.2s ease",
-              }}
-            >
-              {m === "all"
-                ? t("all_tab")
-                : m === "priority"
-                  ? t("priority_tab")
-                  : m === "idx"
-                    ? t("idx_tab")
-                    : t("us_tab")}
-            </button>
-          ))}
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              backgroundColor: "rgba(0,0,0,0.2)",
+              padding: "4px",
+              borderRadius: "8px",
+            }}
+          >
+            {(["all", "priority", "idx", "us"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMarket(m)}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: "0.82rem",
+                  borderRadius: "6px",
+                  border: "none",
+                  cursor: "pointer",
+                  backgroundColor: market === m ? "#3b82f6" : "transparent",
+                  color: market === m ? "white" : "#94a3b8",
+                  fontWeight: 600,
+                  transition: "all 0.2s ease",
+                }}
+              >
+                {m === "all"
+                  ? t("all_tab")
+                  : m === "priority"
+                    ? t("priority_tab")
+                    : m === "idx"
+                      ? t("idx_tab")
+                      : t("us_tab")}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setShowPullbackOnly(!showPullbackOnly)}
+            style={{
+              padding: "7px 14px",
+              fontSize: "0.82rem",
+              borderRadius: "8px",
+              border: "1px solid " + (showPullbackOnly ? "rgba(59, 130, 246, 0.4)" : "rgba(255, 255, 255, 0.1)"),
+              cursor: "pointer",
+              backgroundColor: showPullbackOnly ? "rgba(59, 130, 246, 0.18)" : "rgba(0,0,0,0.25)",
+              color: showPullbackOnly ? "#60a5fa" : "#94a3b8",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <span>🎯</span>
+            {t("swing_pullback")}
+          </button>
         </div>
 
         {/* Date Filter & Search (1 Line, No Labels) */}
@@ -528,12 +574,10 @@ export const Screener: React.FC = () => {
             }}
             title={language === "id" ? "Perbarui Data dari API" : "Refresh Data from API"}
           >
-            <span style={{
-              display: "inline-block",
-              animation: refreshing ? "spin 1s linear infinite" : "none",
-            }}>
-              🔄
-            </span>
+            <i 
+              className={`bx bx-refresh ${refreshing ? "bx-spin" : ""}`} 
+              style={{ fontSize: "1.2rem", display: "inline-block" }}
+            />
             {!isMobile && (language === "id" ? "Perbarui" : "Refresh")}
           </button>
         </div>
@@ -644,7 +688,7 @@ export const Screener: React.FC = () => {
             >
               Belum ada data analisis pasar hasil komputasi di database untuk
               hari ini. Buka salah satu halaman Detail Saham atau jalankan
-              sinkronisasi registri untuk memicu kalkulasi algoritmik BTST
+              sinkronisasi registri untuk memicu kalkulasi algoritmik Swing
               secara otomatis.
             </p>
             <div

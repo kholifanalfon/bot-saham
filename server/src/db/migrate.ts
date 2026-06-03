@@ -75,7 +75,7 @@ async function migrate() {
         open NUMERIC(12, 2),
         previous_close NUMERIC(12, 2),
         volume BIGINT,
-        btst_score NUMERIC(5, 2) NOT NULL,
+        swing_score NUMERIC(5, 2) NOT NULL,
         rsi NUMERIC(5, 2) NOT NULL,
         macd_histogram NUMERIC(10, 4) NOT NULL,
         ema9 NUMERIC(12, 2) NOT NULL,

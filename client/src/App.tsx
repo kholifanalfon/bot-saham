@@ -17,6 +17,7 @@ import { UserManagement } from './pages/UserManagement';
 import { AlgorithmExplanation } from './pages/AlgorithmExplanation';
 import { Settings } from './pages/Settings';
 import { DataFetchReport } from './pages/DataFetchReport';
+import { StockRegistry } from './pages/StockRegistry';
 
 import './styles/globals.css';
 
@@ -45,6 +46,7 @@ export const App: React.FC = () => {
             <Route path="/algorithm" element={<AlgorithmExplanation />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/data-report" element={<DataFetchReport />} />
+            <Route path="/registry" element={<StockRegistry />} />
 
             {/* Admin-Only Routes */}
             <Route element={<AdminGuard />}>

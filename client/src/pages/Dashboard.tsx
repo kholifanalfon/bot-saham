@@ -30,11 +30,11 @@ export const Dashboard: React.FC = () => {
     [],
   );
   const [holdings, setHoldings] = useState<PortfolioHolding[]>([]);
-  const [tpPercent, setTpPercent] = useState(2.0);
-  const [slPercent, setSlPercent] = useState(-2.0);
-  const [tslEnabled, setTslEnabled] = useState(false);
-  const [tslTrigger, setTslTrigger] = useState(2.0);
-  const [tslTrail, setTslTrail] = useState(1.0);
+  const [tpPercent, setTpPercent] = useState(8.0);
+  const [slPercent, setSlPercent] = useState(-4.0);
+  const [tslEnabled, setTslEnabled] = useState(true);
+  const [tslTrigger, setTslTrigger] = useState(5.0);
+  const [tslTrail, setTslTrail] = useState(2.5);
 
   // Responsive mobile view check
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -83,19 +83,19 @@ export const Dashboard: React.FC = () => {
 
         if (settingsRes.ok) {
           const sData = await settingsRes.json();
-          if (sData.btst_tp_percent)
-            setTpPercent(parseFloat(sData.btst_tp_percent));
-          if (sData.btst_sl_percent)
-            setSlPercent(parseFloat(sData.btst_sl_percent));
-          if (sData.btst_tsl_enabled !== undefined)
+          if (sData.swing_tp_percent)
+            setTpPercent(parseFloat(sData.swing_tp_percent));
+          if (sData.swing_sl_percent)
+            setSlPercent(parseFloat(sData.swing_sl_percent));
+          if (sData.swing_tsl_enabled !== undefined)
             setTslEnabled(
-              sData.btst_tsl_enabled === true ||
-                sData.btst_tsl_enabled === "true",
+              sData.swing_tsl_enabled === true ||
+                sData.swing_tsl_enabled === "true",
             );
-          if (sData.btst_tsl_trigger_percent)
-            setTslTrigger(parseFloat(sData.btst_tsl_trigger_percent));
-          if (sData.btst_tsl_trail_percent)
-            setTslTrail(parseFloat(sData.btst_tsl_trail_percent));
+          if (sData.swing_tsl_trigger_percent)
+            setTslTrigger(parseFloat(sData.swing_tsl_trigger_percent));
+          if (sData.swing_tsl_trail_percent)
+            setTslTrail(parseFloat(sData.swing_tsl_trail_percent));
         }
       } catch (err: any) {
         console.error("Error fetching dashboard data:", err);
@@ -561,8 +561,8 @@ export const Dashboard: React.FC = () => {
             }}
           >
             {language === "id"
-              ? "Sentimen pasar tetap didominasi oleh perbankan (BBCA, BBRI) karena data pertumbuhan kredit yang kuat. Perhatikan tanda-tanda pantulan support GOTO di EMA 50-periode. Fokus pada strategi BTST untuk saham breakout konstituen LQ45."
-              : "Market sentiment remains predominantly bullish on financials (BBCA, BBRI) due to strong credit growth data. Watch out for GOTO support rebound markers at 50-period EMA. Focus on BTST strategies for LQ45 constituent breakouts."}
+              ? "Sentimen pasar tetap didominasi oleh perbankan (BBCA, BBRI) karena data pertumbuhan kredit yang kuat. Perhatikan tanda-tanda pantulan support GOTO di EMA 50-periode. Fokus pada strategi Swing Trading untuk saham di area support/breakout konstituen LQ45."
+              : "Market sentiment remains predominantly bullish on financials (BBCA, BBRI) due to strong credit growth data. Watch out for GOTO support rebound markers at 50-period EMA. Focus on Swing Trading strategies for LQ45 constituent breakouts/pullbacks."}
           </div>
           <span style={{ fontSize: "0.72rem", color: "#64748b" }}>
             {t("powered_by_gemini")}

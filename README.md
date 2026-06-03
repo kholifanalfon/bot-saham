@@ -68,10 +68,65 @@ npm run dev
 ```
 
 ### Building for Production
-To compile clean production assets for deployment:
+To compile production assets for manual custom deployments:
 ```bash
 npm run build
 ```
+
+---
+
+## 🚢 Deployment Guide
+
+The application supports two main ways to deploy in production: **Docker Compose (Recommended)** and **Automated Shell Script (PM2 + Nginx)**.
+
+### Option A: Docker Compose Deployment (Recommended)
+
+Make sure you have Docker and Docker Compose installed on your server.
+
+1. Configure production keys in `.env` or pass them directly to the `environment` section of `docker-compose.yml`.
+2. Start all services in detached mode:
+   ```bash
+   docker-compose up -d --build
+   ```
+3. This will spin up:
+   - **PostgreSQL Database** (`db`) on port `5432` with persistent storage.
+   - **Express API Backend** (`server`) on port `3001`. Runs migrations and database seeder automatically.
+   - **React Client Frontend** (`client`) on port `8080`, served via Nginx.
+
+---
+
+### Option B: Automated Script Deployment (PM2 + Nginx)
+
+If you are deploying directly to a Virtual Private Server (VPS) without Docker (e.g. Ubuntu + Nginx + PM2):
+
+1. **Configure Environment Variables**:
+   In your `.env` file, ensure the following target variables are defined:
+   ```env
+   # Path where Nginx serves static files (e.g., public folder)
+   DEPLOY_PATH=/var/www/bot-saham
+   PORT=3001
+   
+   # Enable/disable automatic migration and seeding during deploy
+   RUN_MIGRATE=true
+   RUN_SEED=false
+   ```
+2. **Install PM2**:
+   Make sure PM2 is installed globally on the system:
+   ```bash
+   npm install -g pm2
+   ```
+3. **Execute Deployment Script**:
+   Run the deployment helper script from the root project directory:
+   ```bash
+   # Run directly (or with sudo if writing to restricted paths like /var/www/)
+   sudo bash deploy.sh
+   ```
+4. **What the script does**:
+   - Compiles server TypeScript and prunes developmental dependencies.
+   - Runs database migrations.
+   - Compiles Vite production client assets.
+   - Copies static client builds (`client/dist`) to your configured `DEPLOY_PATH` directory.
+   - Starts or restarts the server daemon process inside PM2 under the process name `bot-saham-server`.
 
 ---
 

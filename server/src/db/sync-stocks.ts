@@ -2,6 +2,7 @@ import { pool, query, getSetting } from "../services/db.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // High-quality fallback stock list in case Gemini API is not configured or fails
+// High-quality fallback stock list in case Gemini API is not configured or fails
 const fallbackStocks = [
   // IDX LQ45 Components
   { symbol: "ADRO.JK", name: "Adaro Energy Indonesia Tbk", market: "IDX" },
@@ -12,21 +13,9 @@ const fallbackStocks = [
   { symbol: "ARTO.JK", name: "Bank Jago Tbk", market: "IDX" },
   { symbol: "ASII.JK", name: "Astra International Tbk", market: "IDX" },
   { symbol: "BBCA.JK", name: "Bank Central Asia Tbk", market: "IDX" },
-  {
-    symbol: "BBNI.JK",
-    name: "Bank Negara Indonesia (Persero) Tbk",
-    market: "IDX",
-  },
-  {
-    symbol: "BBRI.JK",
-    name: "Bank Rakyat Indonesia (Persero) Tbk",
-    market: "IDX",
-  },
-  {
-    symbol: "BBTN.JK",
-    name: "Bank Tabungan Negara (Persero) Tbk",
-    market: "IDX",
-  },
+  { symbol: "BBNI.JK", name: "Bank Negara Indonesia (Persero) Tbk", market: "IDX" },
+  { symbol: "BBRI.JK", name: "Bank Rakyat Indonesia (Persero) Tbk", market: "IDX" },
+  { symbol: "BBTN.JK", name: "Bank Tabungan Negara (Persero) Tbk", market: "IDX" },
   { symbol: "BDMN.JK", name: "Bank Danamon Indonesia Tbk", market: "IDX" },
   { symbol: "BMRI.JK", name: "Bank Mandiri (Persero) Tbk", market: "IDX" },
   { symbol: "BRIS.JK", name: "Bank Syariah Indonesia Tbk", market: "IDX" },
@@ -50,11 +39,7 @@ const fallbackStocks = [
   { symbol: "PGAS.JK", name: "Perusahaan Gas Negara Tbk", market: "IDX" },
   { symbol: "PTBA.JK", name: "Bukit Asam Tbk", market: "IDX" },
   { symbol: "PTPP.JK", name: "PP (Persero) Tbk", market: "IDX" },
-  {
-    symbol: "SIDO.JK",
-    name: "Industri Jamu dan Farmasi Sido Muncul Tbk",
-    market: "IDX",
-  },
+  { symbol: "SIDO.JK", name: "Industri Jamu dan Farmasi Sido Muncul Tbk", market: "IDX" },
   { symbol: "SMGR.JK", name: "Semen Indonesia (Persero) Tbk", market: "IDX" },
   { symbol: "SRTG.JK", name: "Saratoga Investama Sedaya Tbk", market: "IDX" },
   { symbol: "TINS.JK", name: "Timah Tbk", market: "IDX" },
@@ -63,6 +48,9 @@ const fallbackStocks = [
   { symbol: "UNTR.JK", name: "United Tractors Tbk", market: "IDX" },
   { symbol: "UNVR.JK", name: "Unilever Indonesia Tbk", market: "IDX" },
   { symbol: "WIKA.JK", name: "Wijaya Karya (Persero) Tbk", market: "IDX" },
+  { symbol: "ACES.JK", name: "Aspirasi Hidup Indonesia Tbk", market: "IDX" },
+  { symbol: "MYOR.JK", name: "Mayora Indah Tbk", market: "IDX" },
+  { symbol: "MAPA.JK", name: "Map Aktif Adiperkasa Tbk", market: "IDX" },
 
   // US High Liquidity Components
   { symbol: "AAPL", name: "Apple Inc.", market: "US" },
@@ -75,6 +63,16 @@ const fallbackStocks = [
   { symbol: "AMD", name: "Advanced Micro Devices Inc.", market: "US" },
   { symbol: "NFLX", name: "Netflix Inc.", market: "US" },
   { symbol: "AVGO", name: "Broadcom Inc.", market: "US" },
+  { symbol: "JPM", name: "JPMorgan Chase & Co.", market: "US" },
+  { symbol: "BAC", name: "Bank of America Corporation", market: "US" },
+  { symbol: "V", name: "Visa Inc.", market: "US" },
+  { symbol: "MA", name: "Mastercard Incorporated", market: "US" },
+  { symbol: "COST", name: "Costco Wholesale Corporation", market: "US" },
+  { symbol: "WMT", name: "Walmart Inc.", market: "US" },
+  { symbol: "PEP", name: "PepsiCo Inc.", market: "US" },
+  { symbol: "KO", name: "The Coca-Cola Company", market: "US" },
+  { symbol: "DIS", name: "The Walt Disney Company", market: "US" },
+  { symbol: "CRM", name: "Salesforce Inc.", market: "US" },
 ];
 
 import readline from "readline";
@@ -120,13 +118,20 @@ async function syncStocks() {
       });
 
       const prompt = `
-        You are an expert financial registry system. Provide a list of the top stock symbols best suited for short-term day trading based on their strong positive trends, high volatility, and strong momentum in the last 1 to 2 weeks. This list must include at least 30 high-performing, liquid constituents of the ${geminiIdxIndices} index on the Indonesia Stock Exchange (IDX) and up to 15 high-liquidity, high-momentum stocks in the US stock market.
+        You are a professional swing trader and quantitative analyst. Provide a list of the top stock symbols best suited for active swing trading.
+        Since you do not have real-time price feeds, select stocks based on their historical high liquidity, strong market capitalization, and consistent price volatility which makes them ideal for swing trading.
+        
+        Selection Criteria:
+        - Must be highly liquid, blue-chip or strong mid-cap stocks to ensure clean trade execution.
+        - Ensure a diversified mix of sectors (e.g., Financials, Technology, Consumer Goods, Energy, Healthcare).
+        - DO NOT hallucinate ticker symbols. Only provide real, verified, and actively traded symbols.
+        
+        This list must include exactly 45 liquid constituents of the \${geminiIdxIndices} index on the Indonesia Stock Exchange (IDX) and exactly 20 high-liquidity stocks in the US stock market (e.g., S&P 500 or Nasdaq 100 constituents).
         
         Rules:
-        - Provide at least 30 IDX stocks showing the strongest positive trends/momentum over the last 1-2 weeks.
-        - Provide up to 15 US stocks showing strong positive trends/momentum over the last 1-2 weeks.
-        - For IDX stocks: Ticker symbol must end in '.JK' (e.g., 'BBRI.JK', 'TLKM.JK'). Market value must be 'IDX'.
-        - For US stocks: Ticker symbol must be standard US format (e.g., 'AAPL', 'NVDA'). Market value must be 'US'.
+        - Provide exactly 45 real IDX stocks. Ticker symbol MUST end in '.JK' (e.g., 'BBCA.JK', 'BMRI.JK', 'ASII.JK'). Market value must be 'IDX'.
+        - Provide exactly 20 real US stocks. Ticker symbol MUST be standard US format (e.g., 'AAPL', 'MSFT', 'TSLA', 'NVDA'). Market value must be 'US'.
+        - Ensure the company name accurately matches the official ticker symbol.
         
         Provide a clean JSON response ONLY. Do not wrap the JSON in markdown code blocks like \`\`\`json ... \`\`\`.
         The JSON must be a single, flat array of objects matching this exact structure:

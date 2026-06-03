@@ -262,6 +262,7 @@ export const AppLayout: React.FC = () => {
             flex: 1,
             overflow: "hidden",
             position: "relative",
+            marginLeft: isMobile ? "0" : "260px",
           }}
         >
           <Header />

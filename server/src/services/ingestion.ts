@@ -177,8 +177,8 @@ export async function runIngestionPipeline(
       stocks = stocks.filter((s) => s.market === "IDX");
     }
 
-    // Limit to top 30 liquid assets for performance & safety
-    stocks = stocks.slice(0, 30);
+    // Limit to top 80 liquid assets for performance & safety
+    stocks = stocks.slice(0, 80);
     console.log(
       `[Ingestion] Found ${stocks.length} active registry symbols to ingest.`,
     );
@@ -286,7 +286,7 @@ export async function runIngestionPipeline(
           await query(
             `INSERT INTO stock_data (
                date, symbol, price, change_percent, high, low, open, previous_close, volume,
-               btst_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
+               swing_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
              )
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
              ON CONFLICT (date, symbol) DO UPDATE SET
@@ -297,7 +297,7 @@ export async function runIngestionPipeline(
                open = EXCLUDED.open,
                previous_close = EXCLUDED.previous_close,
                volume = EXCLUDED.volume,
-               btst_score = EXCLUDED.btst_score,
+               swing_score = EXCLUDED.swing_score,
                rsi = EXCLUDED.rsi,
                macd_histogram = EXCLUDED.macd_histogram,
                ema9 = EXCLUDED.ema9,
@@ -314,7 +314,7 @@ export async function runIngestionPipeline(
               open,
               prevClose,
               volume,
-              analysis.btstScore,
+              analysis.swingScore,
               analysis.rsi,
               (analysis.macd as any).histogram || 0,
               analysis.ema9,
@@ -436,7 +436,7 @@ export async function runHistoricalIngestion(
       await query(
         `INSERT INTO stock_data (
            date, symbol, price, change_percent, high, low, open, previous_close, volume,
-           btst_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
+           swing_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
          )
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, FALSE)
          ON CONFLICT (date, symbol) DO UPDATE SET
@@ -447,7 +447,7 @@ export async function runHistoricalIngestion(
            open = EXCLUDED.open,
            previous_close = EXCLUDED.previous_close,
            volume = EXCLUDED.volume,
-           btst_score = EXCLUDED.btst_score,
+           swing_score = EXCLUDED.swing_score,
            rsi = EXCLUDED.rsi,
            macd_histogram = EXCLUDED.macd_histogram,
            ema9 = EXCLUDED.ema9,
@@ -467,7 +467,7 @@ export async function runHistoricalIngestion(
           target.open,
           targetIndex > 0 ? rawData[targetIndex - 1].close : target.open,
           target.volume,
-          analysis.btstScore,
+          analysis.swingScore,
           analysis.rsi,
           (analysis.macd as any).histogram || 0,
           analysis.ema9,

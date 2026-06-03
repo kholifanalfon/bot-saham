@@ -67,7 +67,7 @@ export interface AlertRule {
   id: string;
   userId: string;
   symbol: string;
-  type: 'price_above' | 'price_below' | 'btst_score_above' | 'rsi_overbought' | 'rsi_oversold' | 'macd_crossover' | 'volume_spike';
+  type: 'price_above' | 'price_below' | 'swing_score_above' | 'rsi_overbought' | 'rsi_oversold' | 'macd_crossover' | 'volume_spike';
   targetValue?: number;
   isActive: boolean;
   createdAt: string;

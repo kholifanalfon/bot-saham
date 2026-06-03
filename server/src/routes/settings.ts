@@ -30,11 +30,11 @@ router.post('/', async (req, res) => {
     sectors_api_key, 
     gemini_api_key, 
     gemini_model,
-    btst_tp_percent,
-    btst_sl_percent,
-    btst_tsl_enabled,
-    btst_tsl_trigger_percent,
-    btst_tsl_trail_percent,
+    swing_tp_percent,
+    swing_sl_percent,
+    swing_tsl_enabled,
+    swing_tsl_trigger_percent,
+    swing_tsl_trail_percent,
     gemini_idx_indices
   } = req.body;
 
@@ -93,49 +93,49 @@ router.post('/', async (req, res) => {
       );
     }
 
-    // Save BTST & TSL dynamic parameters
-    if (btst_tp_percent !== undefined) {
+    // Save Swing & TSL dynamic parameters
+    if (swing_tp_percent !== undefined) {
       await query(
         `INSERT INTO settings (key, value)
-         VALUES ('btst_tp_percent', $1)
+         VALUES ('swing_tp_percent', $1)
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-        [String(btst_tp_percent)]
+        [String(swing_tp_percent)]
       );
     }
 
-    if (btst_sl_percent !== undefined) {
+    if (swing_sl_percent !== undefined) {
       await query(
         `INSERT INTO settings (key, value)
-         VALUES ('btst_sl_percent', $1)
+         VALUES ('swing_sl_percent', $1)
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-        [String(btst_sl_percent)]
+        [String(swing_sl_percent)]
       );
     }
 
-    if (btst_tsl_enabled !== undefined) {
+    if (swing_tsl_enabled !== undefined) {
       await query(
         `INSERT INTO settings (key, value)
-         VALUES ('btst_tsl_enabled', $1)
+         VALUES ('swing_tsl_enabled', $1)
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-        [btst_tsl_enabled ? 'true' : 'false']
+        [swing_tsl_enabled ? 'true' : 'false']
       );
     }
 
-    if (btst_tsl_trigger_percent !== undefined) {
+    if (swing_tsl_trigger_percent !== undefined) {
       await query(
         `INSERT INTO settings (key, value)
-         VALUES ('btst_tsl_trigger_percent', $1)
+         VALUES ('swing_tsl_trigger_percent', $1)
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-        [String(btst_tsl_trigger_percent)]
+        [String(swing_tsl_trigger_percent)]
       );
     }
 
-    if (btst_tsl_trail_percent !== undefined) {
+    if (swing_tsl_trail_percent !== undefined) {
       await query(
         `INSERT INTO settings (key, value)
-         VALUES ('btst_tsl_trail_percent', $1)
+         VALUES ('swing_tsl_trail_percent', $1)
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-        [String(btst_tsl_trail_percent)]
+        [String(swing_tsl_trail_percent)]
       );
     }
 
@@ -154,11 +154,70 @@ router.post('/', async (req, res) => {
   }
 });
 
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+router.get('/sync-stocks/stream', async (req, res) => {
+  try {
+    console.log('[Settings] Spawning stock registry sync process with streaming...');
+    
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const serverDir = path.resolve(__dirname, '../../');
+
+    // Setup Server-Sent Events headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const child = spawn('npm', ['run', 'db:sync-stocks'], {
+      cwd: serverDir
+    });
+
+    child.stdout.on('data', (data) => {
+      const text = data.toString();
+      res.write(`data: ${JSON.stringify({ type: 'stdout', message: text })}\n\n`);
+    });
+
+    child.stderr.on('data', (data) => {
+      const text = data.toString();
+      res.write(`data: ${JSON.stringify({ type: 'stderr', message: text })}\n\n`);
+    });
+
+    child.on('close', (code) => {
+      res.write(`data: ${JSON.stringify({ type: 'exit', code: code ?? 0 })}\n\n`);
+      res.end();
+    });
+
+    child.on('error', (err) => {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+      res.end();
+    });
+
+    req.on('close', () => {
+      console.log('[Settings] Client disconnected from sync-stocks stream. Terminating child process...');
+      child.kill();
+    });
+
+  } catch (error: any) {
+    res.write(`data: ${JSON.stringify({ type: 'error', message: error.message || 'Error executing sync' })}\n\n`);
+    res.end();
+  }
+});
+
 router.post('/sync-stocks', async (req, res) => {
   try {
     console.log('[Settings] Spawning stock registry sync process...');
+    
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    // Navigate from server/src/routes to server/
+    const serverDir = path.resolve(__dirname, '../../');
+
     // Trigger in the background so it doesn't block the HTTP request
     const child = spawn('npm', ['run', 'db:sync-stocks'], {
+      cwd: serverDir,
       detached: true,
       stdio: 'ignore'
     });

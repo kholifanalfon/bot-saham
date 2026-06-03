@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 interface NotificationRule {
   id: string;
   symbol: string;
-  type: 'price_above' | 'price_below' | 'btst_score_above';
+  type: 'price_above' | 'price_below' | 'swing_score_above';
   targetValue: number;
   isActive: boolean;
 }
@@ -19,7 +19,7 @@ interface AlertLog {
 
 export const Notifications: React.FC = () => {
   const [symbol, setSymbol] = useState('');
-  const [type, setType] = useState<'price_above' | 'price_below' | 'btst_score_above'>('price_above');
+  const [type, setType] = useState<'price_above' | 'price_below' | 'swing_score_above'>('price_above');
   const [targetValue, setTargetValue] = useState('');
 
   const [rules, setRules] = useState<NotificationRule[]>([
@@ -83,7 +83,7 @@ export const Notifications: React.FC = () => {
               <select value={type} onChange={(e: any) => setType(e.target.value)} style={{ padding: '10px' }}>
                 <option value="price_above">Price crosses ABOVE target</option>
                 <option value="price_below">Price crosses BELOW target</option>
-                <option value="btst_score_above">BTST breakout score ABOVE target</option>
+                <option value="swing_score_above">Swing trading score ABOVE target</option>
               </select>
             </div>
 

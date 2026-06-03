@@ -53,8 +53,10 @@ export const StockDetailPage: React.FC = () => {
   const [transacting, setTransacting] = useState(false);
 
   const [showEma9, setShowEma9] = useState(false);
+  const [showEma20, setShowEma20] = useState(false);
   const [showEma21, setShowEma21] = useState(false);
   const [showEma50, setShowEma50] = useState(false);
+  const [showEma200, setShowEma200] = useState(false);
   const [showRsi, setShowRsi] = useState(false);
   const [showMacd, setShowMacd] = useState(false);
 
@@ -75,9 +77,13 @@ export const StockDetailPage: React.FC = () => {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify({ symbol: activeSymbol, language, forceRefresh: force }),
+          body: JSON.stringify({
+            symbol: activeSymbol,
+            language,
+            forceRefresh: force,
+          }),
           credentials: "include",
         },
       );
@@ -205,13 +211,23 @@ export const StockDetailPage: React.FC = () => {
         }
         setChartData(data.reverse());
         setAnalysisResult({
-          btstScore: meta.score,
+          swingScore: meta.score,
           rsi: 52.4,
           macd: { histogram: 0.15 },
           ema9: meta.price * 0.99,
+          ema20: meta.price * 0.985,
           ema21: meta.price * 0.98,
           ema50: meta.price * 0.96,
+          ema200: meta.price * 0.90,
           bb: { upper: meta.price * 1.05, lower: meta.price * 0.95 },
+          componentScores: {
+            ema: meta.score >= 70 ? 90 : 50,
+            macd: meta.score >= 70 ? 80 : 40,
+            rsi: meta.score >= 70 ? 85 : 45,
+            obv: meta.score >= 70 ? 100 : 40,
+            volume: meta.score >= 70 ? 95 : 50,
+            bb: meta.score >= 70 ? 75 : 50,
+          },
         });
         setQuote({
           c: meta.price,
@@ -222,8 +238,8 @@ export const StockDetailPage: React.FC = () => {
           confidenceScore: meta.score,
           reasoning:
             language === "id"
-              ? `"${activeSymbol} menunjukkan konfigurasi breakout BTST yang kuat. RSI 14-periode saat ini berada di 52.4, memverifikasi momentum tinggi tanpa risiko overbought. Konfirmasi volume dan persilangan bullish MACD mendukung kenaikan jangka pendek yang menargetkan keuntungan 5% untuk besok."`
-              : `"${activeSymbol} displays a strong BTST breakout configuration. The 14-period RSI is currently at 52.4, verifiying high momentum without overbought risks. Volume confirmation and MACD bullish crossovers support a short-term trend run targeting a 5% gain for tomorrow."`,
+              ? `"${activeSymbol} menunjukkan konfigurasi swing trading yang kuat. RSI harian stabil di wilayah momentum 52.4, sedangkan posisi harga di atas EMA 21 dan 50 mengonfirmasi kelanjutan tren naik dengan ruang penguatan yang sehat."`
+              : `"${activeSymbol} displays a strong swing trading configuration. The daily RSI is stable in the momentum region at 52.4, and the price sitting above its 21 and 50 EMAs confirms a continuation of the uptrend with healthy room to grow."`,
         });
       } finally {
         setLoading(false);
@@ -246,7 +262,9 @@ export const StockDetailPage: React.FC = () => {
         if (responsePortfolio.ok) {
           const pData = await responsePortfolio.json();
           const userHoldings = pData.holdings || [];
-          const currentHolding = userHoldings.find((h: any) => h.symbol === activeSymbol);
+          const currentHolding = userHoldings.find(
+            (h: any) => h.symbol === activeSymbol,
+          );
           setHolding(currentHolding || null);
         }
       } catch (err) {
@@ -256,11 +274,15 @@ export const StockDetailPage: React.FC = () => {
     fetchHolding();
   }, [activeSymbol]);
 
-  const handleTransactionSubmit = async (e: React.FormEvent, type: "buy" | "sell") => {
+  const handleTransactionSubmit = async (
+    e: React.FormEvent,
+    type: "buy" | "sell",
+  ) => {
     e.preventDefault();
     setTransacting(true);
-    const sharesValue = type === "buy" ? parseInt(buyShares) : parseInt(sellShares);
-    
+    const sharesValue =
+      type === "buy" ? parseInt(buyShares) : parseInt(sellShares);
+
     if (type === "sell" && holding && sharesValue > holding.shares) {
       alert(
         language === "id"
@@ -291,7 +313,7 @@ export const StockDetailPage: React.FC = () => {
         const errorData = await response.json();
         throw new Error(errorData.error || "Gagal memproses transaksi");
       }
-      
+
       alert(
         type === "buy"
           ? language === "id"
@@ -316,7 +338,9 @@ export const StockDetailPage: React.FC = () => {
       if (responsePortfolio.ok) {
         const pData = await responsePortfolio.json();
         const userHoldings = pData.holdings || [];
-        const currentHolding = userHoldings.find((h: any) => h.symbol === activeSymbol);
+        const currentHolding = userHoldings.find(
+          (h: any) => h.symbol === activeSymbol,
+        );
         setHolding(currentHolding || null);
       }
     } catch (err: any) {
@@ -345,52 +369,86 @@ export const StockDetailPage: React.FC = () => {
     const series = analysisResult?.allIndicators?.ema9Series;
     if (!series || !chartData.length) return [];
     const offset = chartData.length - series.length;
-    return series.map((val: number, idx: number) => ({
-      time: chartData[idx + offset]?.time,
-      value: val,
-    })).filter((item: any) => item.time);
+    return series
+      .map((val: number, idx: number) => ({
+        time: chartData[idx + offset]?.time,
+        value: val,
+      }))
+      .filter((item: any) => item.time);
+  }, [analysisResult, chartData]);
+
+  const ema20Data = React.useMemo(() => {
+    const series = analysisResult?.allIndicators?.ema20Series;
+    if (!series || !chartData.length) return [];
+    const offset = chartData.length - series.length;
+    return series
+      .map((val: number, idx: number) => ({
+        time: chartData[idx + offset]?.time,
+        value: val,
+      }))
+      .filter((item: any) => item.time);
   }, [analysisResult, chartData]);
 
   const ema21Data = React.useMemo(() => {
     const series = analysisResult?.allIndicators?.ema21Series;
     if (!series || !chartData.length) return [];
     const offset = chartData.length - series.length;
-    return series.map((val: number, idx: number) => ({
-      time: chartData[idx + offset]?.time,
-      value: val,
-    })).filter((item: any) => item.time);
+    return series
+      .map((val: number, idx: number) => ({
+        time: chartData[idx + offset]?.time,
+        value: val,
+      }))
+      .filter((item: any) => item.time);
   }, [analysisResult, chartData]);
 
   const ema50Data = React.useMemo(() => {
     const series = analysisResult?.allIndicators?.ema50Series;
     if (!series || !chartData.length) return [];
     const offset = chartData.length - series.length;
-    return series.map((val: number, idx: number) => ({
-      time: chartData[idx + offset]?.time,
-      value: val,
-    })).filter((item: any) => item.time);
+    return series
+      .map((val: number, idx: number) => ({
+        time: chartData[idx + offset]?.time,
+        value: val,
+      }))
+      .filter((item: any) => item.time);
+  }, [analysisResult, chartData]);
+
+  const ema200Data = React.useMemo(() => {
+    const series = analysisResult?.allIndicators?.ema200Series;
+    if (!series || !chartData.length) return [];
+    const offset = chartData.length - series.length;
+    return series
+      .map((val: number, idx: number) => ({
+        time: chartData[idx + offset]?.time,
+        value: val,
+      }))
+      .filter((item: any) => item.time);
   }, [analysisResult, chartData]);
 
   const rsiData = React.useMemo(() => {
     const series = analysisResult?.allIndicators?.rsiSeries;
     if (!series || !chartData.length) return [];
     const offset = chartData.length - series.length;
-    return series.map((val: number, idx: number) => ({
-      time: chartData[idx + offset]?.time,
-      value: val,
-    })).filter((item: any) => item.time);
+    return series
+      .map((val: number, idx: number) => ({
+        time: chartData[idx + offset]?.time,
+        value: val,
+      }))
+      .filter((item: any) => item.time);
   }, [analysisResult, chartData]);
 
   const macdData = React.useMemo(() => {
     const series = analysisResult?.allIndicators?.macdSeries;
     if (!series || !chartData.length) return [];
     const offset = chartData.length - series.length;
-    return series.map((item: any, idx: number) => ({
-      time: chartData[idx + offset]?.time,
-      macd: item.macd || 0,
-      signal: item.signal || 0,
-      histogram: item.histogram || 0,
-    })).filter((item: any) => item.time);
+    return series
+      .map((item: any, idx: number) => ({
+        time: chartData[idx + offset]?.time,
+        macd: item.macd || 0,
+        signal: item.signal || 0,
+        histogram: item.histogram || 0,
+      }))
+      .filter((item: any) => item.time);
   }, [analysisResult, chartData]);
 
   return (
@@ -481,59 +539,48 @@ export const StockDetailPage: React.FC = () => {
             )}
           </div>
         </div>
-
-        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: isMobile ? "16px" : "32px", width: isMobile ? "100%" : "auto" }}>
-          <div style={{ display: "flex", flexDirection: "row", justifyContent: isMobile ? "space-between" : "flex-start", gap: isMobile ? "16px" : "32px", width: isMobile ? "100%" : "auto" }}>
-            <div>
-              <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
-                {t("last_price")}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            alignItems: isMobile ? "stretch" : "center",
+            gap: isMobile ? "16px" : "32px",
+            width: isMobile ? "100%" : "auto",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              justifyContent: "center",
+              width: isMobile ? "100%" : "auto",
+            }}
+          >
+            {/* Row 1: Last Price */}
+            <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+              <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+                {t("last_price")}:
               </span>
-              <div
-                style={{
-                  fontSize: "1.5rem",
-                  fontWeight: 700,
-                  marginTop: "2px",
-                  transition: "color 0.15s ease",
-                }}
-              >
+              <span style={{ fontSize: "1.6rem", fontWeight: 800, color: "#f8fafc" }}>
                 {currentPrice.toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
-              </div>
-            </div>
-
-            <div>
-              <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
-                {t("daily_change")}
               </span>
-              <div
-                style={{
-                  fontSize: "1.5rem",
-                  fontWeight: 700,
-                  color: isProfit ? "#10b981" : "#ef4444",
-                  marginTop: "2px",
-                  transition: "color 0.15s ease",
-                }}
-              >
+            </div>
+            {/* Row 2: Daily Change | Swing Score */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", color: "#cbd5e1" }}>
+              <span style={{ color: isProfit ? "#10b981" : "#ef4444", fontWeight: 700 }}>
                 {isProfit ? "↑" : "↓"} {Math.abs(percentChange).toFixed(2)}%
-              </div>
-            </div>
-
-            <div>
-              <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
-                {t("btst_score")}
               </span>
-              <div
-                style={{
-                  fontSize: "1.5rem",
-                  fontWeight: 700,
-                  color: "#3b82f6",
-                  marginTop: "2px",
-                }}
-              >
-                {analysisResult ? Math.round(analysisResult.btstScore) : 84} / 100
-              </div>
+              <span style={{ color: "rgba(255, 255, 255, 0.15)" }}>|</span>
+              <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <span style={{ color: "#94a3b8" }}>{t("btst_score")}:</span>
+                <span style={{ color: "#3b82f6", fontWeight: 700 }}>
+                  {analysisResult ? Math.round(analysisResult.swingScore) : 84}/100
+                </span>
+              </span>
             </div>
           </div>
 
@@ -634,51 +681,126 @@ export const StockDetailPage: React.FC = () => {
               marginTop: "-4px",
             }}
           >
-            <span style={{ color: "#94a3b8", fontWeight: 500, marginRight: "4px" }}>
+            <span
+              style={{ color: "#94a3b8", fontWeight: 500, marginRight: "4px" }}
+            >
               {language === "id" ? "Tampilkan Indikator:" : "Show Indicators:"}
             </span>
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-              <input 
-                type="checkbox" 
-                checked={showEma9} 
-                onChange={(e) => setShowEma9(e.target.checked)} 
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showEma9}
+                onChange={(e) => setShowEma9(e.target.checked)}
                 style={{ accentColor: "#3b82f6", cursor: "pointer" }}
               />
               <span style={{ color: "#60a5fa", fontWeight: 600 }}>EMA 9</span>
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-              <input 
-                type="checkbox" 
-                checked={showEma21} 
-                onChange={(e) => setShowEma21(e.target.checked)} 
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showEma20}
+                onChange={(e) => setShowEma20(e.target.checked)}
+                style={{ accentColor: "#10b981", cursor: "pointer" }}
+              />
+              <span style={{ color: "#34d399", fontWeight: 600 }}>EMA 20</span>
+            </label>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showEma21}
+                onChange={(e) => setShowEma21(e.target.checked)}
                 style={{ accentColor: "#eab308", cursor: "pointer" }}
               />
               <span style={{ color: "#facc15", fontWeight: 600 }}>EMA 21</span>
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-              <input 
-                type="checkbox" 
-                checked={showEma50} 
-                onChange={(e) => setShowEma50(e.target.checked)} 
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showEma50}
+                onChange={(e) => setShowEma50(e.target.checked)}
                 style={{ accentColor: "#ec4899", cursor: "pointer" }}
               />
               <span style={{ color: "#f472b6", fontWeight: 600 }}>EMA 50</span>
             </label>
-            <div style={{ width: "1px", height: "14px", background: "rgba(255,255,255,0.15)" }} />
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-              <input 
-                type="checkbox" 
-                checked={showRsi} 
-                onChange={(e) => setShowRsi(e.target.checked)} 
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showEma200}
+                onChange={(e) => setShowEma200(e.target.checked)}
+                style={{ accentColor: "#f97316", cursor: "pointer" }}
+              />
+              <span style={{ color: "#fb923c", fontWeight: 600 }}>EMA 200</span>
+            </label>
+            <div
+              style={{
+                width: "1px",
+                height: "14px",
+                background: "rgba(255,255,255,0.15)",
+              }}
+            />
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showRsi}
+                onChange={(e) => setShowRsi(e.target.checked)}
                 style={{ accentColor: "#10b981", cursor: "pointer" }}
               />
               <span style={{ fontWeight: 600 }}>RSI</span>
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-              <input 
-                type="checkbox" 
-                checked={showMacd} 
-                onChange={(e) => setShowMacd(e.target.checked)} 
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showMacd}
+                onChange={(e) => setShowMacd(e.target.checked)}
                 style={{ accentColor: "#10b981", cursor: "pointer" }}
               />
               <span style={{ fontWeight: 600 }}>MACD</span>
@@ -709,14 +831,18 @@ export const StockDetailPage: React.FC = () => {
           ) : (
             chartData.length > 0 && (
               <>
-                <CandlestickChart 
-                  data={chartData} 
-                  ema9Data={showEma9 ? ema9Data : []} 
-                  ema21Data={showEma21 ? ema21Data : []} 
-                  ema50Data={showEma50 ? ema50Data : []} 
+                <CandlestickChart
+                  data={chartData}
+                  ema9Data={showEma9 ? ema9Data : []}
+                  ema20Data={showEma20 ? ema20Data : []}
+                  ema21Data={showEma21 ? ema21Data : []}
+                  ema50Data={showEma50 ? ema50Data : []}
+                  ema200Data={showEma200 ? ema200Data : []}
                 />
                 {showRsi && rsiData.length > 0 && <RsiChart data={rsiData} />}
-                {showMacd && macdData.length > 0 && <MacdChart data={macdData} />}
+                {showMacd && macdData.length > 0 && (
+                  <MacdChart data={macdData} />
+                )}
               </>
             )
           )}
@@ -828,6 +954,88 @@ export const StockDetailPage: React.FC = () => {
             <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>
               {t("metrics_signals")}
             </h3>
+
+            {/* Swing Score Breakdown */}
+            <div style={{
+              borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+              paddingBottom: "16px",
+              marginBottom: "4px"
+            }}>
+              <span style={{ fontSize: "0.76rem", color: "#94a3b8", fontWeight: 600, display: "block", marginBottom: "10px", letterSpacing: "0.5px" }}>
+                🎯 {language === "id" ? "ANALISIS KOMPONEN SKOR" : "SCORE COMPONENT BREAKDOWN"}
+              </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {[
+                  { 
+                    name: "EMA stack & Trend (25%)", 
+                    score: Math.round(analysisResult?.componentScores?.ema ?? 80), 
+                    color: "#3b82f6",
+                    desc: language === "id" 
+                      ? "Mengukur keselarasan tren. Nilai tinggi diberikan jika harga berada di atas EMA 9, 21, dan 50 (Golden Stack) atau memantul dari support EMA saat tren naik."
+                      : "Measures trend alignment. High score is given when price stays above EMA 9, 21, and 50 (Golden Stack) or rebounds from EMA support during uptrends."
+                  },
+                  { 
+                    name: "OBV Accumulation (25%)", 
+                    score: Math.round(analysisResult?.componentScores?.obv ?? 75), 
+                    color: "#10b981",
+                    desc: language === "id"
+                      ? "Mendeteksi akumulasi volume institusi. Nilai penuh jika rata-rata OBV jangka pendek (EMA 5) berada di atas rata-rata jangka menengah (EMA 20)."
+                      : "Detects institutional volume accumulation. Full points if short-term OBV average (EMA 5) is above mid-term average (EMA 20)."
+                  },
+                  { 
+                    name: "MACD Momentum (20%)", 
+                    score: Math.round(analysisResult?.componentScores?.macd ?? 85), 
+                    color: "#60a5fa",
+                    desc: language === "id"
+                      ? "Mengukur momentum tren. Nilai tinggi jika terjadi bullish crossover (garis MACD di atas garis sinyal), terutama dari wilayah oversold."
+                      : "Measures trend momentum. High score if there is a bullish crossover (MACD line above signal line), especially from oversold regions."
+                  },
+                  { 
+                    name: "RSI Momentum (15%)", 
+                    score: Math.round(analysisResult?.componentScores?.rsi ?? 90), 
+                    color: "#facc15",
+                    desc: language === "id"
+                      ? "Mengidentifikasi momentum overbought/oversold. Wilayah RSI 45-65 menunjukkan momentum tren naik yang sehat, sementara RSI < 35 adalah peluang pullback."
+                      : "Identifies overbought/oversold momentum. The RSI 45-65 region shows healthy uptrend momentum, while RSI < 35 indicates pullback opportunities."
+                  },
+                  { 
+                    name: "Volume Confirmation (10%)", 
+                    score: Math.round(analysisResult?.componentScores?.volume ?? 70), 
+                    color: "#ec4899",
+                    desc: language === "id"
+                      ? "Mengonfirmasi partisipasi pasar harian. Volume transaksi di atas rata-rata 5 hari terakhir (volume > rata-rata * 1.3) yang disertai kenaikan harga dianggap bullish."
+                      : "Confirms daily market participation. Transaction volume above the 5-day average (volume > average * 1.3) accompanied by price gains is bullish."
+                  },
+                  { 
+                    name: "Bollinger Bands (5%)", 
+                    score: Math.round(analysisResult?.componentScores?.bb ?? 60), 
+                    color: "#a855f7",
+                    desc: language === "id"
+                      ? "Mengukur posisi volatilitas harga. Harga yang memantul dari batas bawah (lower band) atau batas tengah (middle band) menawarkan titik beli risiko rendah."
+                      : "Measures price volatility position. Prices rebounding from the lower band or middle band offer low-risk entry points."
+                  },
+                ].map((item, idx) => (
+                  <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: "#cbd5e1" }}>{item.name}</span>
+                        <span className="tooltip-container" style={{ cursor: "help", color: "#94a3b8", display: "inline-flex", alignItems: "center" }}>
+                          <span>ⓘ</span>
+                          <span className="tooltip-text" style={{ fontSize: "0.74rem", lineHeight: "1.4", width: "240px", whiteSpace: "normal", fontWeight: "normal" }}>
+                            {item.desc}
+                          </span>
+                        </span>
+                      </div>
+                      <span style={{ fontWeight: 700, color: item.color }}>{item.score} / 100</span>
+                    </div>
+                    <div style={{ width: "100%", height: "4px", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: "2px", overflow: "hidden" }}>
+                      <div style={{ width: `${item.score}%`, height: "100%", backgroundColor: item.color, borderRadius: "2px" }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div
               style={{ display: "flex", flexDirection: "column", gap: "12px" }}
             >
@@ -925,7 +1133,7 @@ export const StockDetailPage: React.FC = () => {
                       {analysisResult?.ema9
                         ? Math.round(analysisResult.ema9)
                         : "..."}
-                      ) &gt; EMA21 &gt; EMA50
+                      ) &gt; EMA20 &gt; EMA50
                     </span>
                     <span className="tooltip-text">
                       {geminiAnalysis?.emaExplanation
@@ -978,10 +1186,44 @@ export const StockDetailPage: React.FC = () => {
               gap: "16px",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>
-                {t("gemini_evaluation")}
-              </h3>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "8px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>
+                  {t("gemini_evaluation")}
+                </h3>
+                <span
+                  style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 700,
+                    backgroundColor: "rgba(59, 130, 246, 0.15)",
+                    color: "#60a5fa",
+                    padding: "2px 8px",
+                    borderRadius: "100px",
+                    border: "1px solid rgba(59, 130, 246, 0.3)",
+                    letterSpacing: "0.5px",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {language === "id"
+                    ? "Spesialis Swing Trader"
+                    : "Swing Trading Specialist"}
+                </span>
+              </div>
               <button
                 onClick={() => handleFetchGemini(true)}
                 disabled={loadingGemini}
@@ -998,7 +1240,7 @@ export const StockDetailPage: React.FC = () => {
                   opacity: loadingGemini ? 0.6 : 1,
                   padding: "4px 8px",
                   borderRadius: "4px",
-                  transition: "all 0.15s ease"
+                  transition: "all 0.15s ease",
                 }}
               >
                 {loadingGemini ? (
@@ -1177,9 +1419,9 @@ export const StockDetailPage: React.FC = () => {
                   </span>
                   <strong style={{ color: "#10b981", fontSize: "1.05rem" }}>
                     Rp{" "}
-                    {(
-                      (parseInt(buyShares) || 0) * currentPrice
-                    ).toLocaleString("id-ID")}
+                    {((parseInt(buyShares) || 0) * currentPrice).toLocaleString(
+                      "id-ID",
+                    )}
                   </strong>
                 </div>
               </div>
@@ -1258,7 +1500,15 @@ export const StockDetailPage: React.FC = () => {
                 Rp {Math.round(currentPrice).toLocaleString("id-ID")}
               </strong>
             </p>
-            <p style={{ fontSize: "0.8rem", color: "#e2e8f0", backgroundColor: "rgba(255,255,255,0.05)", padding: "8px", borderRadius: "4px" }}>
+            <p
+              style={{
+                fontSize: "0.8rem",
+                color: "#e2e8f0",
+                backgroundColor: "rgba(255,255,255,0.05)",
+                padding: "8px",
+                borderRadius: "4px",
+              }}
+            >
               Maksimum Kepemilikan: <strong>{holding.shares} lembar</strong>
             </p>
             <form

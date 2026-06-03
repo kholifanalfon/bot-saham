@@ -5,22 +5,28 @@ import type { ISeriesApi } from 'lightweight-charts';
 interface CandlestickChartProps {
   data: { time: string; open: number; high: number; low: number; close: number }[];
   ema9Data?: { time: string; value: number }[];
+  ema20Data?: { time: string; value: number }[];
   ema21Data?: { time: string; value: number }[];
   ema50Data?: { time: string; value: number }[];
+  ema200Data?: { time: string; value: number }[];
 }
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({ 
   data, 
   ema9Data = [], 
+  ema20Data = [], 
   ema21Data = [], 
-  ema50Data = [] 
+  ema50Data = [],
+  ema200Data = []
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const ema9SeriesRef = useRef<any>(null);
+  const ema20SeriesRef = useRef<any>(null);
   const ema21SeriesRef = useRef<any>(null);
   const ema50SeriesRef = useRef<any>(null);
+  const ema200SeriesRef = useRef<any>(null);
 
   // 1. Initialize Chart Canvas & Series once on mount
   useEffect(() => {
@@ -63,6 +69,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       title: 'EMA 9',
     });
 
+    const ema20Series = chart.addLineSeries({
+      color: '#10b981', // Emerald green for EMA20
+      lineWidth: 2,
+      title: 'EMA 20',
+    });
+
     const ema21Series = chart.addLineSeries({
       color: '#eab308', // Yellow for EMA21
       lineWidth: 2,
@@ -75,11 +87,19 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       title: 'EMA 50',
     });
 
+    const ema200Series = chart.addLineSeries({
+      color: '#f97316', // Orange for EMA200
+      lineWidth: 2,
+      title: 'EMA 200',
+    });
+
     chartRef.current = chart;
     seriesRef.current = candlestickSeries;
     ema9SeriesRef.current = ema9Series;
+    ema20SeriesRef.current = ema20Series;
     ema21SeriesRef.current = ema21Series;
     ema50SeriesRef.current = ema50Series;
+    ema200SeriesRef.current = ema200Series;
 
     window.addEventListener('resize', handleResize);
 
@@ -89,8 +109,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       chartRef.current = null;
       seriesRef.current = null;
       ema9SeriesRef.current = null;
+      ema20SeriesRef.current = null;
       ema21SeriesRef.current = null;
       ema50SeriesRef.current = null;
+      ema200SeriesRef.current = null;
     };
   }, []);
 
@@ -99,18 +121,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     if (seriesRef.current && data && data.length > 0) {
       seriesRef.current.setData(data);
       
-      const isMobile = window.innerWidth < 768;
-      if (isMobile) {
-        // Zoom in on mobile to show the last 20 candles for better readability
-        const visibleCount = Math.min(20, data.length);
-        chartRef.current?.timeScale().setVisibleLogicalRange({
-          from: data.length - visibleCount,
-          to: data.length + 1,
-        });
-      } else {
-        // Fit all content on desktop
-        chartRef.current?.timeScale().fitContent();
-      }
+      // Zoom in to show the last 12 candles (approx. 1-2 weeks of trading days) for better focus
+      const visibleCount = Math.min(12, data.length);
+      chartRef.current?.timeScale().setVisibleLogicalRange({
+        from: data.length - visibleCount,
+        to: data.length,
+      });
     }
   }, [data]);
 
@@ -120,6 +136,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       ema9SeriesRef.current.setData(ema9Data);
     }
   }, [ema9Data]);
+
+  useEffect(() => {
+    if (ema20SeriesRef.current) {
+      ema20SeriesRef.current.setData(ema20Data);
+    }
+  }, [ema20Data]);
 
   useEffect(() => {
     if (ema21SeriesRef.current) {
@@ -132,6 +154,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       ema50SeriesRef.current.setData(ema50Data);
     }
   }, [ema50Data]);
+
+  useEffect(() => {
+    if (ema200SeriesRef.current) {
+      ema200SeriesRef.current.setData(ema200Data);
+    }
+  }, [ema200Data]);
 
   return <div ref={chartContainerRef} style={{ width: '100%', position: 'relative' }} />;
 };

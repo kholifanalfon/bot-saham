@@ -7,11 +7,11 @@ export const Settings: React.FC = () => {
   const { t, language } = useLanguageStore();
   const [usMarketEnabled, setUsMarketEnabled] = useState(false);
   const [geminiModel, setGeminiModel] = useState("gemini-1.5-flash");
-  const [btstTpPercent, setBtstTpPercent] = useState("2.0");
-  const [btstSlPercent, setBtstSlPercent] = useState("-2.0");
-  const [btstTslEnabled, setBtstTslEnabled] = useState(false);
-  const [btstTslTriggerPercent, setBtstTslTriggerPercent] = useState("2.0");
-  const [btstTslTrailPercent, setBtstTslTrailPercent] = useState("1.0");
+  const [btstTpPercent, setBtstTpPercent] = useState("8.0");
+  const [btstSlPercent, setBtstSlPercent] = useState("-4.0");
+  const [btstTslEnabled, setBtstTslEnabled] = useState(true);
+  const [btstTslTriggerPercent, setBtstTslTriggerPercent] = useState("5.0");
+  const [btstTslTrailPercent, setBtstTslTrailPercent] = useState("2.5");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -21,6 +21,11 @@ export const Settings: React.FC = () => {
     "SMC Liquid",
   ]);
   const [syncingRegistry, setSyncingRegistry] = useState(false);
+  const [showConsole, setShowConsole] = useState(false);
+  const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "running" | "success" | "error">("idle");
+  const logContainerRef = useRef<HTMLDivElement | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   // Responsive mobile view check
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -32,6 +37,22 @@ export const Settings: React.FC = () => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Scroll to bottom when logs update
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [consoleLogs]);
+
+  // Clean up SSE connection on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
   }, []);
 
   // Fetch current settings on mount
@@ -48,20 +69,20 @@ export const Settings: React.FC = () => {
           if (data.gemini_model) {
             setGeminiModel(data.gemini_model);
           }
-          if (data.btst_tp_percent) {
-            setBtstTpPercent(data.btst_tp_percent);
+          if (data.swing_tp_percent) {
+            setBtstTpPercent(data.swing_tp_percent);
           }
-          if (data.btst_sl_percent) {
-            setBtstSlPercent(data.btst_sl_percent);
+          if (data.swing_sl_percent) {
+            setBtstSlPercent(data.swing_sl_percent);
           }
-          if (data.btst_tsl_enabled !== undefined) {
-            setBtstTslEnabled(!!data.btst_tsl_enabled);
+          if (data.swing_tsl_enabled !== undefined) {
+            setBtstTslEnabled(!!data.swing_tsl_enabled);
           }
-          if (data.btst_tsl_trigger_percent) {
-            setBtstTslTriggerPercent(data.btst_tsl_trigger_percent);
+          if (data.swing_tsl_trigger_percent) {
+            setBtstTslTriggerPercent(data.swing_tsl_trigger_percent);
           }
-          if (data.btst_tsl_trail_percent) {
-            setBtstTslTrailPercent(data.btst_tsl_trail_percent);
+          if (data.swing_tsl_trail_percent) {
+            setBtstTslTrailPercent(data.swing_tsl_trail_percent);
           }
           if (data.gemini_idx_indices) {
             const list = data.gemini_idx_indices
@@ -195,33 +216,69 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const handleSyncStocks = async () => {
-    try {
-      setSyncingRegistry(true);
-      setSuccess(false);
-      const response = await fetch(
-        "http://localhost:3001/api/settings/sync-stocks",
-        {
-          method: "POST",
-          credentials: "include",
-        },
-      );
-      if (response.ok) {
-        setSuccess(true);
-        alert(
-          language === "id"
-            ? "Sukses: Proses sinkronisasi registri saham (db:sync-stocks) telah dipicu di latar belakang server!"
-            : "Success: Stock registry synchronization (db:sync-stocks) has been triggered in the server background!",
-        );
-        setTimeout(() => setSuccess(false), 3000);
-      } else {
-        throw new Error("Gagal memicu sinkronisasi registri saham.");
-      }
-    } catch (err: any) {
-      alert(err.message || "Gagal memproses sinkronisasi");
-    } finally {
-      setSyncingRegistry(false);
+  const handleSyncStocks = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
     }
+
+    setConsoleLogs([]);
+    setShowConsole(true);
+    setSyncStatus("running");
+    setSyncingRegistry(true);
+
+    const es = new EventSource("http://localhost:3001/api/settings/sync-stocks/stream", {
+      withCredentials: true
+    });
+
+    eventSourceRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'stdout' || payload.type === 'stderr') {
+          // Keep logs clean by filtering empty lines and appending
+          const lines = payload.message.split('\n').filter((l: string) => l.trim() !== '');
+          if (lines.length > 0) {
+            setConsoleLogs(prev => [...prev, ...lines]);
+          }
+        } else if (payload.type === 'exit') {
+          if (payload.code === 0) {
+            setSyncStatus("success");
+            setConsoleLogs(prev => [...prev, language === 'id' ? "[Sistem] Sinkronisasi registri saham berhasil diselesaikan!" : "[System] Stock registry synchronization completed successfully!"]);
+          } else {
+            setSyncStatus("error");
+            setConsoleLogs(prev => [...prev, language === 'id' ? `[Sistem] Proses keluar dengan kode status: ${payload.code}` : `[System] Process exited with status code: ${payload.code}`]);
+          }
+          setSyncingRegistry(false);
+          es.close();
+        } else if (payload.type === 'error') {
+          setSyncStatus("error");
+          setConsoleLogs(prev => [...prev, `[System Error] ${payload.message}`]);
+          setSyncingRegistry(false);
+          es.close();
+        }
+      } catch (err) {
+        console.error("Failed to parse log stream event:", err);
+      }
+    };
+
+    es.onerror = (err) => {
+      console.error("EventSource encountered an error:", err);
+      setSyncStatus("error");
+      setConsoleLogs(prev => [...prev, language === 'id' ? "[Sistem Error] Koneksi ke server terputus." : "[System Error] Connection to server lost."]);
+      setSyncingRegistry(false);
+      es.close();
+    };
+  };
+
+  const handleCancelSync = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setSyncStatus("idle");
+    setSyncingRegistry(false);
+    setConsoleLogs(prev => [...prev, language === 'id' ? "[Sistem] Sinkronisasi dibatalkan oleh pengguna." : "[System] Sync cancelled by user."]);
   };
 
   const handleModelChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -261,11 +318,11 @@ export const Settings: React.FC = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          btst_tp_percent: btstTpPercent,
-          btst_sl_percent: btstSlPercent,
-          btst_tsl_enabled: btstTslEnabled,
-          btst_tsl_trigger_percent: btstTslTriggerPercent,
-          btst_tsl_trail_percent: btstTslTrailPercent,
+          swing_tp_percent: btstTpPercent,
+          swing_sl_percent: btstSlPercent,
+          swing_tsl_enabled: btstTslEnabled,
+          swing_tsl_trigger_percent: btstTslTriggerPercent,
+          swing_tsl_trail_percent: btstTslTrailPercent,
         }),
         credentials: "include",
       });
@@ -660,6 +717,129 @@ export const Settings: React.FC = () => {
                 </span>
               </button>
             </div>
+
+            {showConsole && (
+              <div
+                style={{
+                  marginTop: "16px",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  backgroundColor: "rgba(10, 15, 30, 0.8)",
+                  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
+                  overflow: "hidden",
+                  fontFamily: "Courier New, Consolas, monospace",
+                  fontSize: "0.82rem",
+                  color: "#e2e8f0",
+                }}
+              >
+                {/* Header bar */}
+                <div
+                  style={{
+                    backgroundColor: "rgba(30, 41, 59, 0.5)",
+                    padding: "8px 16px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span
+                      className={syncStatus === "running" ? "live-pulse" : ""}
+                      style={{
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        backgroundColor:
+                          syncStatus === "running"
+                            ? "#3b82f6"
+                            : syncStatus === "success"
+                            ? "#10b981"
+                            : syncStatus === "error"
+                            ? "#ef4444"
+                            : "#94a3b8",
+                        display: "inline-block",
+                      }}
+                    />
+                    <span style={{ fontWeight: 600, color: "#94a3b8" }}>
+                      {language === "id" ? "Proses Sinkronisasi" : "Sync Process Logs"}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {syncStatus === "running" && (
+                      <button
+                        type="button"
+                        onClick={handleCancelSync}
+                        style={{
+                          backgroundColor: "rgba(239, 68, 68, 0.2)",
+                          border: "1px solid rgba(239, 68, 68, 0.4)",
+                          color: "#ef4444",
+                          borderRadius: "4px",
+                          padding: "2px 8px",
+                          fontSize: "0.75rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {language === "id" ? "Batal" : "Cancel"}
+                      </button>
+                    )}
+                    {(syncStatus === "success" || syncStatus === "error" || syncStatus === "idle") && (
+                      <button
+                        type="button"
+                        onClick={() => setShowConsole(false)}
+                        style={{
+                          backgroundColor: "rgba(255, 255, 255, 0.1)",
+                          border: "1px solid rgba(255, 255, 255, 0.15)",
+                          color: "#cbd5e1",
+                          borderRadius: "4px",
+                          padding: "2px 8px",
+                          fontSize: "0.75rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {language === "id" ? "Tutup" : "Close"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Log display */}
+                <div
+                  ref={logContainerRef}
+                  style={{
+                    maxHeight: "250px",
+                    overflowY: "auto",
+                    padding: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                  }}
+                >
+                  {consoleLogs.length === 0 ? (
+                    <div style={{ color: "#64748b", fontStyle: "italic" }}>
+                      {language === "id" ? "Menunggu keluaran proses..." : "Waiting for process output..."}
+                    </div>
+                  ) : (
+                    consoleLogs.map((log, idx) => {
+                      let color = "#cbd5e1"; // default
+                      if (log.includes("Error") || log.includes("error") || log.includes("FAILED") || log.includes("[System Error]")) {
+                        color = "#f87171"; // redish
+                      } else if (log.includes("success") || log.includes("Sukses") || log.includes("successfully") || log.includes("Selesai") || log.includes("completed")) {
+                        color = "#34d399"; // greenish
+                      } else if (log.includes("npm run") || log.startsWith(">")) {
+                        color = "#60a5fa"; // blueish command info
+                      }
+                      
+                      return (
+                        <div key={idx} style={{ color, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                          {log}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         {/* BTST Strategy & Dynamic Trailing Stop Loss (TSL) Settings */}
@@ -694,7 +874,7 @@ export const Settings: React.FC = () => {
                   color: "#f8fafc",
                 }}
               >
-                BTST Strategy (TP & SL)
+                Swing Strategy (TP & SL)
               </h3>
               <p
                 style={{
@@ -1005,7 +1185,7 @@ export const Settings: React.FC = () => {
                 boxShadow: "0 0 15px rgba(59, 130, 246, 0.3)",
               }}
             >
-              {saving ? "Saving..." : "Simpan Strategi BTST & TSL"}
+              {saving ? "Saving..." : "Simpan Strategi Swing & TSL"}
             </button>
           </div>
         </form>

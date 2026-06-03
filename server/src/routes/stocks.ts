@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getQuote } from '../services/finnhub.js';
 import { getHistoricalData, getYahooQuote } from '../services/yahoo-finance.js';
 import { getIDXStocks } from '../services/sectors.js';
+import { query } from '../services/db.js';
 
 const router = Router();
 
@@ -48,6 +49,25 @@ router.get('/idx-stocks', async (req, res) => {
     return res.status(200).json(stocks);
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Error fetching IDX stocks' });
+  }
+});
+
+router.get('/registry', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT 
+        s.symbol, 
+        s.name, 
+        s.market, 
+        s.is_active AS "isActive",
+        COALESCE(d.swing_score, 0) AS "swingScore"
+       FROM stocks s
+       LEFT JOIN stock_data d ON s.symbol = d.symbol AND d.is_active = true
+       ORDER BY "swingScore" DESC, s.symbol ASC`
+    );
+    return res.status(200).json(result.rows);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error fetching stock registry' });
   }
 });
 

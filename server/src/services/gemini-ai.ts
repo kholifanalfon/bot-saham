@@ -10,7 +10,7 @@ export async function analyzeStock(
     ema9: number;
     ema21: number;
     ema50: number;
-    btstScore: number;
+    swingScore: number;
   },
   language: string = "id",
   newsContext: string = "",
@@ -26,10 +26,10 @@ export async function analyzeStock(
   const langName =
     language === "id" ? "Indonesian (Bahasa Indonesia)" : "English";
   const prompt = `
-    You are an elite financial analyst AI for the "Bot Saham" app.
+    You are an elite financial analyst AI and a certified Swing Trading Specialist for the "Bot Saham" app.
     Analyze the following stock data for symbol ${symbol}:
     - Current Price: ${historicalData[historicalData.length - 1]?.close || "N/A"}
-    - BTST (Buy Today, Sell Tomorrow) Score: ${indicators.btstScore.toFixed(1)} / 100
+    - Swing Trading Score: ${indicators.swingScore.toFixed(1)} / 100
     - RSI (14): ${indicators.rsi.toFixed(1)}
     - MACD Histogram: ${indicators.macd.histogram.toFixed(2)} (MACD: ${indicators.macd.macd.toFixed(2)}, Signal: ${indicators.macd.signal.toFixed(2)})
     - EMA9: ${indicators.ema9.toFixed(2)}, EMA21: ${indicators.ema21.toFixed(2)}, EMA50: ${indicators.ema50.toFixed(2)}
@@ -44,14 +44,14 @@ export async function analyzeStock(
       "riskAssessment": "Low, Medium, or High",
       "recommendation": "Strong Buy, Buy, Hold, or Avoid (This recommendation MUST fully synthesize and weigh technical indicators alongside the political climate, company-specific news, and price prediction).",
       "confidenceScore": 85, // An integer from 0 to 100 representing confidence in the recommendation, taking into account technicals, political conditions, company news, and prediction factors.
-      "reasoning": "A highly detailed professional explanation in ${langName} explaining why this stock fits the BTST strategy or not based on the indicators, politics, and news.",
+      "reasoning": "A highly detailed professional explanation in ${langName} explaining why this stock fits the Swing Trading strategy or not based on the indicators, politics, and news. Begin the reasoning with '[Spesialis Swing Trader]' or '[Swing Trading Specialist]' depending on the output language.",
       "rsiExplanation": "A simple layperson explanation in ${langName} explaining what the current RSI value of ${indicators.rsi.toFixed(1)} means for this stock (e.g., if it's neutral, cheap/oversold, or expensive/overbought and what that means for a beginner).",
       "macdExplanation": "A simple layperson explanation in ${langName} explaining what the current MACD signal (${indicators.macd.histogram > 0 ? "Bullish Crossover" : "Consolidating"}) means in simple trading terms.",
       "emaExplanation": "A simple layperson explanation in ${langName} explaining what the EMA alignment (9/21/50) means for the stock's trend speed in simple terms.",
       "bbExplanation": "A simple layperson explanation in ${langName} explaining what the Bollinger Bands status (rebounding from support/lower band) means for a beginner trader.",
       "politicalImpact": "A highly specific, accurate, and detailed explanation in ${langName} outlining the current political climate, macro-government policy, or interest rates impact on this stock or its sector based on the Recent News Context. Avoid generic templates, make it factual and relevant to current real-world events.",
       "companySpecificNews": "A highly specific, accurate, and detailed summary in ${langName} of recent corporate news, earnings, expansions, or issues affecting this asset based on the Recent News Context. Avoid generic templates, make it factual and relevant to the specific company.",
-      "priceDirectionPrediction": "A clear prediction (e.g., UP, DOWN, or SIDEWAYS) in ${langName} specifically focused on TOMORROW'S market open (Buy Today, Sell Tomorrow context), followed by a short layman explanation of why based on the combination of technicals, politics, and real news."
+      "priceDirectionPrediction": "A clear prediction (e.g., UP, DOWN, or SIDEWAYS) in ${langName} specifically focused on the Swing Trading outlook for the NEXT FEW WEEKS (identifying possible swing targets and trade setup), followed by a short layman explanation of why based on the combination of technicals, politics, and real news."
     }
   `;
 
@@ -65,17 +65,17 @@ export async function analyzeStock(
     let risk = "Medium";
     let confidence = 65;
 
-    if (indicators.btstScore >= 75) {
+    if (indicators.swingScore >= 75) {
       recommendation = "Strong Buy";
       trend = "Strong Bullish Crossover";
       risk = "Low";
       confidence = 90;
-    } else if (indicators.btstScore >= 60) {
+    } else if (indicators.swingScore >= 60) {
       recommendation = "Buy";
       trend = "Bullish Momentum";
       risk = "Medium";
       confidence = 78;
-    } else if (indicators.btstScore <= 35) {
+    } else if (indicators.swingScore <= 35) {
       recommendation = "Avoid";
       trend = "Strong Bearish Trend";
       risk = "High";
@@ -83,7 +83,7 @@ export async function analyzeStock(
     }
 
     if (language === "id") {
-      const supportStr = `Perkiraan Support: ${(indicators.ema50 * 0.97).toFixed(2)} | Resistance: ${(indicators.ema9 * 1.05).toFixed(2)}`;
+      const supportStr = `Perkiraan Support: ${(indicators.ema50 * 0.97).toFixed(2)} | Resistance: ${(indicators.ema21 * 1.08).toFixed(2)}`;
       const rsiStatus =
         indicators.rsi > 70
           ? "jenuh beli (overbought)"
@@ -114,33 +114,33 @@ export async function analyzeStock(
         riskAssessment: riskStatus,
         recommendation: recommendation,
         confidenceScore: confidence,
-        reasoning: `Berdasarkan simulasi analisis teknikal untuk ${symbol}, aset ini memiliki skor BTST sebesar ${indicators.btstScore.toFixed(1)}. Indikator RSI 14-periode saat ini berada di angka ${indicators.rsi.toFixed(1)}, menunjukkan kondisi ${rsiStatus}. Penyelarasan EMA (9/21/50) mengonfirmasi ${trendStatus}. Lonjakan volume transaksi dan pola MACD memperkuat pembacaan ini.`,
-        rsiExplanation: `RSI berada di ${indicators.rsi.toFixed(1)}, yang berarti kekuatan pembelian saat ini ${indicators.rsi > 70 ? "sangat kuat/harganya sudah mahal (jenuh beli)" : indicators.rsi < 30 ? "sangat lemah/harganya sudah murah (jenuh jual)" : "sedang-sedang saja (netral)"}. Ini aman untuk pemula karena tidak terlalu berisiko.`,
-        macdExplanation: `Sinyal MACD menunjukkan ${indicators.macd.histogram > 0 ? "Bullish Crossover (momentum naik)" : "Konsolidasi (harga bergerak mendatar)"}. Ini menunjukkan bahwa ${indicators.macd.histogram > 0 ? "para pembeli mulai mendominasi pasar dan harga berpotensi naik lagi" : "minat beli dan jual sedang seimbang, sehingga harga saham cenderung stabil"}.`,
-        emaExplanation: `Garis rata-rata pergerakan harga jangka pendek (EMA9) berada di atas garis menengah (EMA21) dan panjang (EMA50). Bagi orang awam, ini menandakan bahwa arah tren saham saat ini sedang meluncur naik dengan kecepatan yang sehat.`,
-        bbExplanation: `Harga memantul dari batas bawah (Support) Bollinger Bands. Artinya, harga saham saat ini dianggap sudah cukup murah dan memiliki peluang besar untuk memantul kembali ke atas.`,
+        reasoning: `[Spesialis Swing Trader] Berdasarkan simulasi analisis teknikal untuk ${symbol}, aset ini memiliki skor Swing sebesar ${indicators.swingScore.toFixed(1)}. Indikator RSI 14-periode saat ini berada di angka ${indicators.rsi.toFixed(1)}, menunjukkan kondisi ${rsiStatus}. Penyelarasan EMA (9/21/50) mengonfirmasi ${trendStatus}. Volume transaksi dan pola MACD mendukung prospek pergerakan swing jangka pendek-menengah ini.`,
+        rsiExplanation: `RSI berada di ${indicators.rsi.toFixed(1)}, yang berarti kekuatan pembelian saat ini ${indicators.rsi > 70 ? "sangat kuat/harganya sudah mahal (jenuh beli)" : indicators.rsi < 30 ? "sangat lemah/harganya sudah murah (jenuh jual)" : "sedang-sedang saja (netral)"}. Ini membantu menentukan wilayah jenuh untuk swing trading.`,
+        macdExplanation: `Sinyal MACD menunjukkan ${indicators.macd.histogram > 0 ? "Bullish Crossover (momentum naik)" : "Konsolidasi (harga bergerak mendatar)"}. Bagi pelaku swing trading, crossover positif merupakan konfirmasi awal pembalikan arah tren.`,
+        emaExplanation: `Garis rata-rata pergerakan harga jangka pendek (EMA9) berada di atas garis menengah (EMA21) dan panjang (EMA50). Kondisi ini menandakan bahwa arah tren saham saat ini sedang naik dengan momentum yang sehat untuk swing trading.`,
+        bbExplanation: `Harga memantul dari batas bawah (Support) Bollinger Bands. Artinya, harga saham saat ini berada di area support swing dan memiliki peluang besar untuk memantul kembali ke atas menuju target middle atau upper band.`,
         politicalImpact:
           "Stabilitas politik dalam negeri yang baik dan kebijakan BI rate yang stabil memberikan keyakinan lebih pada perputaran modal di sektor ini.",
         companySpecificNews: `Laporan ekspansi usaha terbaru dari ${symbol} diantisipasi secara positif oleh pasar finansial lokal karena potensi peningkatan profitabilitas di kuartal berikutnya.`,
-        priceDirectionPrediction: `NAIK. Gabungan indikator teknikal positif dan dorongan sentimen industri menunjukkan potensi pergerakan harga saham ${symbol} naik esok hari saat pasar dibuka.`,
+        priceDirectionPrediction: `NAIK (SWING UP). Gabungan indikator teknikal positif dan struktur tren mendukung pergerakan naik menuju resistance terdekat dalam beberapa hari ke depan.`,
       };
     }
 
     return {
       trendSummary: trend,
-      supportResistance: `Estimated Support: ${(indicators.ema50 * 0.97).toFixed(2)} | Resistance: ${(indicators.ema9 * 1.05).toFixed(2)}`,
+      supportResistance: `Estimated Support: ${(indicators.ema50 * 0.97).toFixed(2)} | Resistance: ${(indicators.ema21 * 1.08).toFixed(2)}`,
       riskAssessment: risk,
       recommendation: recommendation,
       confidenceScore: confidence,
-      reasoning: `Based on a simulated technical analysis for ${symbol}, the asset displays a BTST score of ${indicators.btstScore.toFixed(1)}. The 14-period RSI is currently at ${indicators.rsi.toFixed(1)}, showing ${indicators.rsi > 70 ? "overbought status" : indicators.rsi < 30 ? "oversold conditions" : "neutral momentum"}. EMA alignment (9/21/50) confirms a ${trend.toLowerCase()} phase. Volume spikes and MACD crossover corroborate this reading.`,
-      rsiExplanation: `RSI is at ${indicators.rsi.toFixed(1)}, meaning the stock is currently ${indicators.rsi > 70 ? "expensive (overbought)" : indicators.rsi < 30 ? "cheap (oversold)" : "fairly priced (neutral)"}. Standard momentum suggests it is steady and suitable for entry.`,
-      macdExplanation: `MACD signals ${indicators.macd.histogram > 0 ? "a Bullish Crossover" : "Consolidation"}. This means ${indicators.macd.histogram > 0 ? "buying momentum is building up, indicating a good potential upward move" : "forces of buying and selling are in balance, so price remains flat"}.`,
-      emaExplanation: `The short-term trend line is above the medium and long-term ones. For beginners, this indicates the stock price is in a healthy, active uptrend.`,
-      bbExplanation: `The price is rebounding from the lower Bollinger Band. For a beginner, this indicates the price has hit a short-term floor and is likely to bounce back upwards.`,
+      reasoning: `[Swing Trading Specialist] Based on a simulated technical analysis for ${symbol}, the asset displays a Swing score of ${indicators.swingScore.toFixed(1)}. The 14-period RSI is currently at ${indicators.rsi.toFixed(1)}, showing ${indicators.rsi > 70 ? "overbought status" : indicators.rsi < 30 ? "oversold conditions" : "neutral momentum"}. EMA alignment (9/21/50) confirms a ${trend.toLowerCase()} phase. Volume and MACD crossover corroborate this reading for a swing trade.`,
+      rsiExplanation: `RSI is at ${indicators.rsi.toFixed(1)}, meaning the stock is currently ${indicators.rsi > 70 ? "expensive (overbought)" : indicators.rsi < 30 ? "cheap (oversold)" : "fairly priced (neutral)"}. Perfect for identifying potential swing reversals.`,
+      macdExplanation: `MACD signals ${indicators.macd.histogram > 0 ? "a Bullish Crossover" : "Consolidation"}. This indicates that ${indicators.macd.histogram > 0 ? "buying momentum is building up, confirming an upward swing" : "forces of buying and selling are in balance, so price remains flat"}.`,
+      emaExplanation: `The short-term trend line is above the medium and long-term ones. This indicates the stock price is in a healthy, active uptrend suitable for swing trading.`,
+      bbExplanation: `The price is rebounding from the lower Bollinger Band. This indicates the price has hit a swing floor and is likely to bounce back upwards.`,
       politicalImpact:
         "Strong domestic political stability and consistent central bank interest rate policies improve capital flow confidence.",
       companySpecificNews: `Market reports highlight positive reception of ${symbol}'s new business expansion plans, which are expected to boost subsequent quarterly earnings.`,
-      priceDirectionPrediction: `UP. Strong technical buying signs coupled with solid industry sentiment predict a positive price movement for ${symbol} tomorrow at market open.`,
+      priceDirectionPrediction: `UP (SWING UP). Strong technical buying signs coupled with solid industry sentiment predict a positive swing movement for ${symbol} over the next few weeks.`,
     };
   }
 
@@ -162,37 +162,52 @@ export async function analyzeStock(
   }
 }
 
-export async function getMarketSentiment(news: any[]): Promise<any> {
+export async function getMarketSentiment(news: any[], language: string = "id"): Promise<any> {
   const apiKey = await getSetting("gemini_api_key");
   const modelName = (await getSetting("gemini_model")) || "gemini-1.5-flash";
 
   let genAI: GoogleGenerativeAI | null = null;
-  if (apiKey && apiKey !== "your_key_here" && apiKey.startsWith("AIzaSy")) {
+  if (apiKey && apiKey !== "your_key_here") {
     genAI = new GoogleGenerativeAI(apiKey);
   }
 
+  const langName = language === "id" ? "Indonesian (Bahasa Indonesia)" : "English";
+
   if (!genAI) {
+    if (language === "id") {
+      return {
+        sentiment: "Bullish",
+        score: 68,
+        summary: "Sektor perbankan dan infrastruktur Indonesia mempertahankan momentum kenaikan yang kuat. Volume pembelian tetap konsisten di atas rata-rata pergerakan 20 hari.",
+        sectors: ["Finansial: Bullish", "Infrastruktur: Netral", "Teknologi: Volatil"]
+      };
+    }
     return {
-      sentiment: "Neutral to Positive",
-      score: 62,
-      summary:
-        "Market news sentiment indicates standard trading volumes and stable price structures across major sectors.",
+      sentiment: "Bullish",
+      score: 68,
+      summary: "Indonesian banking and infrastructure sectors maintain strong upward momentum. Buying volume remains consistent above the 20-day moving average.",
+      sectors: ["Financials: Bullish", "Infrastructure: Neutral", "Technology: Volatile"]
     };
   }
 
   const newsSummary = news
-    .slice(0, 5)
-    .map((n) => n.title)
+    .slice(0, 8)
+    .map((n) => `- ${n.title || n.headline || ""}: ${n.summary || ""}`)
     .join("\n");
   const prompt = `
-    Analyze the sentiment of these recent financial news titles:
+    Analyze the overall market sentiment and sector performance based on these recent financial news items:
     ${newsSummary}
 
-    Provide a JSON response ONLY. Do not include markdown formatting or blocks. The JSON must match this structure exactly:
+    Provide a JSON response ONLY. Do not include markdown formatting or blocks. The JSON must match this structure exactly, and all text values (sentiment, summary, sectors values) must be written in ${langName}:
     {
       "sentiment": "Bullish, Bearish, or Neutral",
-      "score": 50,
-      "summary": "A brief summary of why the sentiment is such."
+      "score": 68, // An integer score from 0 (very bearish) to 100 (very bullish)
+      "summary": "A brief, professional summary explaining the market direction and news drivers.",
+      "sectors": [
+        "Financials: Bullish",
+        "Technology: Volatile",
+        "Infrastructure: Neutral"
+      ] // An array containing 3 or 4 major sector sentiment classifications
     }
   `;
 
@@ -208,10 +223,79 @@ export async function getMarketSentiment(news: any[]): Promise<any> {
     return JSON.parse(jsonStr);
   } catch (error) {
     console.error("Gemini AI sentiment error:", error);
+    if (language === "id") {
+      return {
+        sentiment: "Netral",
+        score: 50,
+        summary: "Tidak dapat menganalisis sentimen pasar karena kesalahan sistem atau API.",
+        sectors: ["Finansial: Netral", "Infrastruktur: Netral", "Teknologi: Netral"]
+      };
+    }
     return {
       sentiment: "Neutral",
       score: 50,
-      summary: "Unable to analyze sentiment due to API request error.",
+      summary: "Unable to analyze market sentiment due to system or API request error.",
+      sectors: ["Financials: Neutral", "Infrastructure: Neutral", "Technology: Neutral"]
     };
   }
 }
+
+export async function askChatAssistant(
+  message: string,
+  chatHistory: any[],
+  language: string = "id"
+): Promise<string> {
+  const apiKey = await getSetting("gemini_api_key");
+  const modelName = (await getSetting("gemini_model")) || "gemini-1.5-flash";
+
+  let genAI: GoogleGenerativeAI | null = null;
+  if (apiKey && apiKey !== "your_key_here") {
+    genAI = new GoogleGenerativeAI(apiKey);
+  }
+
+  if (!genAI) {
+    if (language === "id") {
+      return `[Spesialis Swing Trader] Halo! Kunci API Gemini belum dikonfigurasi di pengaturan database. Ini adalah respons simulasi. Untuk pertanyaan Anda tentang "${message}", dalam swing trading sangat disarankan untuk memperhatikan struktur tren EMA harian/mingguan dan tren volume OBV sebelum mengambil keputusan.`;
+    }
+    return `[Swing Trading Specialist] Hello! The Gemini API key is not configured in database settings. This is a simulated response. Regarding your query about "${message}", in swing trading it is highly recommended to inspect daily/weekly EMA structures and OBV volume trends before entry.`;
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction: `You are an elite financial analyst AI and a certified Swing Trading Specialist for the "Bot Saham" app.
+      Help the user with stock analysis, swing trading strategies, technical indicators (RSI, MACD, EMAs, On-Balance Volume accumulation, Bollinger Bands), risk management (Stop Loss, Take Profit, Trailing Stop), and general financial queries.
+      
+      CRITICAL REQUIREMENT: Whenever you analyze, recommend, or discuss specific stock tickers or investment setups, you MUST always explicitly provide:
+      - **Entry Strategy** (buy zone, technical triggers, support confirmations)
+      - **Take Profit (TP)** (specific price target zones or exit signals)
+      - **Stop Loss (SL)** (specific price invalidation levels or stop rules)
+      
+      Keep answers professional, insightful, and concise. Prefix your responses with '[Spesialis Swing Trader]' or '[Swing Trading Specialist]' depending on the output language.
+      Always respond in the requested language (which is ${language === "id" ? "Indonesian (Bahasa Indonesia)" : "English"}).`
+    });
+
+    // Map frontend chat history format to Gemini SDK format
+    // Frontend history: { sender: 'user' | 'ai', text: string }
+    // Gemini SDK history: { role: 'user' | 'model', parts: [{ text: string }] }
+    // Clean history from first welcome message
+    const formattedHistory = chatHistory
+      .filter((_, idx) => idx > 0)
+      .map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }]
+      }));
+
+    const chat = model.startChat({
+      history: formattedHistory
+    });
+
+    const result = await chat.sendMessage(message);
+    const response = await result.response;
+    return response.text().trim();
+  } catch (error) {
+    console.error("Gemini AI assistant chat error:", error);
+    throw error;
+  }
+}
+

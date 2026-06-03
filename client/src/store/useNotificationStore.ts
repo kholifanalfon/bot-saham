@@ -3,7 +3,7 @@ import { create } from 'zustand';
 export interface AlertRule {
   id: string;
   symbol: string;
-  type: 'price_above' | 'price_below' | 'btst_score_above';
+  type: 'price_above' | 'price_below' | 'swing_score_above';
   targetValue?: number;
   isActive: boolean;
   createdAt: string;
