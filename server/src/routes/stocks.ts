@@ -54,6 +54,10 @@ router.get('/idx-stocks', async (req, res) => {
 
 router.get('/registry', async (req, res) => {
   try {
+    const settingsRes = await query("SELECT value FROM settings WHERE key = 'us_market_enabled'");
+    const usEnabled = settingsRes.rows[0]?.value === 'true';
+    const whereClause = usEnabled ? "" : "WHERE s.market = 'IDX'";
+
     const result = await query(
       `SELECT 
         s.symbol, 
@@ -63,6 +67,7 @@ router.get('/registry', async (req, res) => {
         COALESCE(d.swing_score, 0) AS "swingScore"
        FROM stocks s
        LEFT JOIN stock_data d ON s.symbol = d.symbol AND d.is_active = true
+       ${whereClause}
        ORDER BY "swingScore" DESC, s.symbol ASC`
     );
     return res.status(200).json(result.rows);

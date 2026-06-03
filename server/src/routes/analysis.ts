@@ -40,7 +40,13 @@ router.post('/refresh', async (req, res) => {
 // GET /api/analysis/active-stocks - Get list of active registered stock symbols
 router.get('/active-stocks', async (req, res) => {
   try {
-    const result = await query("SELECT symbol, name, market FROM stocks WHERE is_active = true ORDER BY symbol ASC");
+    const settingsRes = await query("SELECT value FROM settings WHERE key = 'us_market_enabled'");
+    const usEnabled = settingsRes.rows[0]?.value === 'true';
+    const queryStr = usEnabled 
+      ? "SELECT symbol, name, market FROM stocks WHERE is_active = true ORDER BY symbol ASC"
+      : "SELECT symbol, name, market FROM stocks WHERE is_active = true AND market = 'IDX' ORDER BY symbol ASC";
+    
+    const result = await query(queryStr);
     return res.status(200).json(result.rows);
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Error fetching active stocks' });
@@ -70,11 +76,15 @@ router.post('/ingest-historical', async (req, res) => {
   }
 
   try {
+    const settingsRes = await query("SELECT value FROM settings WHERE key = 'us_market_enabled'");
+    const usEnabled = settingsRes.rows[0]?.value === 'true';
+    const marketFilter = usEnabled ? "" : " AND market = 'IDX'";
+
     let targetSymbols: string[] = [];
 
     if (all) {
       // Get all active symbols from database
-      const activeStocks = await query("SELECT symbol FROM stocks WHERE is_active = true");
+      const activeStocks = await query(`SELECT symbol FROM stocks WHERE is_active = true${marketFilter}`);
       targetSymbols = activeStocks.rows.map(r => r.symbol);
     } else if (symbols && Array.isArray(symbols) && symbols.length > 0) {
       targetSymbols = symbols;
@@ -86,7 +96,7 @@ router.post('/ingest-historical', async (req, res) => {
         .filter((s: string) => s.length > 0);
     } else {
       // Default to all active stocks if none specified
-      const activeStocks = await query("SELECT symbol FROM stocks WHERE is_active = true");
+      const activeStocks = await query(`SELECT symbol FROM stocks WHERE is_active = true${marketFilter}`);
       targetSymbols = activeStocks.rows.map(r => r.symbol);
     }
 
@@ -130,6 +140,10 @@ router.get('/', async (req, res) => {
   const endDate = req.query.endDate as string;
 
   try {
+    const settingsRes = await query("SELECT value FROM settings WHERE key = 'us_market_enabled'");
+    const usEnabled = settingsRes.rows[0]?.value === 'true';
+    const marketFilter = usEnabled ? "" : " AND s.market = 'IDX'";
+
     // Only proactively trigger the lazy ingestion check if no specific date filter is applied (default latest flow)
     if (!targetDate && !startDate && !endDate) {
       checkAndTriggerIngestion().catch(err => {
@@ -151,7 +165,7 @@ router.get('/', async (req, res) => {
         d.date
       FROM stock_data d
       JOIN stocks s ON d.symbol = s.symbol
-      WHERE d.is_active = true AND s.is_active = true
+      WHERE d.is_active = true AND s.is_active = true${marketFilter}
       ORDER BY d.swing_score DESC
     `;
     let queryParams: any[] = [];
@@ -171,7 +185,7 @@ router.get('/', async (req, res) => {
           d.date
         FROM stock_data d
         JOIN stocks s ON d.symbol = s.symbol
-        WHERE DATE(d.date) >= $1 AND DATE(d.date) <= $2 AND s.is_active = true
+        WHERE DATE(d.date) >= $1 AND DATE(d.date) <= $2 AND s.is_active = true${marketFilter}
         ORDER BY d.date DESC, d.swing_score DESC
       `;
       queryParams = [startDate, endDate];
@@ -190,7 +204,7 @@ router.get('/', async (req, res) => {
           d.date
         FROM stock_data d
         JOIN stocks s ON d.symbol = s.symbol
-        WHERE DATE(d.date) = $1 AND s.is_active = true
+        WHERE DATE(d.date) = $1 AND s.is_active = true${marketFilter}
         ORDER BY d.swing_score DESC
       `;
       queryParams = [targetDate];

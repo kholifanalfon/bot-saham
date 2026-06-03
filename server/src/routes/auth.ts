@@ -40,7 +40,10 @@ router.post('/register', async (req, res) => {
     const accessToken = generateToken(safeUser);
 
     // Set httpOnly session cookie
-    const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
+    let cookieDomain = process.env.COOKIE_DOMAIN || undefined;
+    if (cookieDomain && (req.hostname === 'localhost' || req.hostname === '127.0.0.1' || req.hostname.match(/^\d+\.\d+\.\d+\.\d+$/))) {
+      cookieDomain = undefined;
+    }
     res.cookie(SESSION_COOKIE_NAME, accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https',
@@ -88,7 +91,10 @@ router.post('/login', async (req, res) => {
 
     const accessToken = generateToken(safeUser);
 
-    const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
+    let cookieDomain = process.env.COOKIE_DOMAIN || undefined;
+    if (cookieDomain && (req.hostname === 'localhost' || req.hostname === '127.0.0.1' || req.hostname.match(/^\d+\.\d+\.\d+\.\d+$/))) {
+      cookieDomain = undefined;
+    }
     res.cookie(SESSION_COOKIE_NAME, accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https',
