@@ -32,4 +32,21 @@ window.fetch = async (input, init) => {
   return response;
 };
 
+// Prevent pinch-to-zoom gestures on touch screens
+document.addEventListener("touchstart", (event) => {
+  if (event.touches.length > 1) {
+    event.preventDefault();
+  }
+}, { passive: false });
+
+// Prevent double-tap to zoom
+let lastTouchEnd = 0;
+document.addEventListener("touchend", (event) => {
+  const now = new Date().getTime();
+  if (now - lastTouchEnd <= 300) {
+    event.preventDefault();
+  }
+  lastTouchEnd = now;
+}, false);
+
 createRoot(document.getElementById("root")!).render(<App />);

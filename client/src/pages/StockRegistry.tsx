@@ -95,7 +95,8 @@ export const StockRegistry: React.FC = () => {
     setSyncStatus("running");
     setSyncingRegistry(true);
 
-    const es = new EventSource("http://localhost:3001/api/settings/sync-stocks/stream", {
+    const apiBaseUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3001`;
+    const es = new EventSource(`${apiBaseUrl}/api/settings/sync-stocks/stream`, {
       withCredentials: true
     });
 

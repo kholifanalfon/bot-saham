@@ -85,7 +85,7 @@ cd "$SCRIPT_DIR/server"
 if command -v pm2 &> /dev/null; then
   if pm2 describe bot-saham-server &> /dev/null; then
     log_info "Merestart server PM2..."
-    pm2 restart bot-saham-server || {
+    pm2 restart bot-saham-server --update-env || {
       log_warn "Gagal merestart, menghapus konfigurasi lama dan mendaftarkan ulang ke PM2..."
       pm2 delete bot-saham-server
       pm2 start dist/index.js --name "bot-saham-server"
