@@ -249,14 +249,16 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const prices = history.map((h) => h.close);
+    const highs = history.map((h) => h.high);
+    const lows = history.map((h) => h.low);
+    const closes = history.map((h) => h.close);
     const volume = history.map((h) => h.volume);
 
-    const result = analyze(prices, volume);
+    const result = analyze(highs, lows, closes, volume);
     return res.status(200).json({
       symbol,
       ...result,
-      lastClose: prices[prices.length - 1]
+      lastClose: closes[closes.length - 1]
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Error running technical analysis' });

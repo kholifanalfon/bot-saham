@@ -3,6 +3,9 @@ import { getQuote } from '../services/finnhub.js';
 import { getHistoricalData, getYahooQuote } from '../services/yahoo-finance.js';
 import { getIDXStocks } from '../services/sectors.js';
 import { query } from '../services/db.js';
+import { lookupStockInfo } from '../services/gemini-ai.js';
+import { requireAuth } from '../middleware/authMiddleware.js';
+import { ingestSingleStock } from '../services/ingestion.js';
 
 const router = Router();
 
@@ -64,15 +67,77 @@ router.get('/registry', async (req, res) => {
         s.name, 
         s.market, 
         s.is_active AS "isActive",
+        COALESCE(s.category, 'core') AS "category",
         COALESCE(d.swing_score, 0) AS "swingScore"
        FROM stocks s
        LEFT JOIN stock_data d ON s.symbol = d.symbol AND d.is_active = true
        ${whereClause}
-       ORDER BY "swingScore" DESC, s.symbol ASC`
+       ORDER BY "category" DESC, "swingScore" DESC, s.symbol ASC`
     );
     return res.status(200).json(result.rows);
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Error fetching stock registry' });
+  }
+});
+
+// POST /api/stocks/lookup - Lookup company info for a stock code using Gemini AI
+router.post('/lookup', requireAuth, async (req, res) => {
+  const { symbol } = req.body;
+  if (!symbol || typeof symbol !== 'string') {
+    return res.status(400).json({ error: 'Stock symbol is required' });
+  }
+
+  try {
+    const info = await lookupStockInfo(symbol);
+    return res.status(200).json(info);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error looking up stock info' });
+  }
+});
+
+// POST /api/stocks/add - Add a new stock to the registry
+router.post('/add', requireAuth, async (req, res) => {
+  const { symbol, name, market } = req.body;
+  if (!symbol || !name || !market) {
+    return res.status(400).json({ error: 'symbol, name, and market are required' });
+  }
+
+  const upperSymbol = symbol.trim().toUpperCase();
+  const cleanMarket = market.trim().toUpperCase();
+
+  if (!['IDX', 'US'].includes(cleanMarket)) {
+    return res.status(400).json({ error: 'market must be IDX or US' });
+  }
+
+  try {
+    // Check if symbol already exists
+    const existing = await query('SELECT symbol FROM stocks WHERE symbol = $1', [upperSymbol]);
+    if (existing.rowCount && existing.rowCount > 0) {
+      return res.status(409).json({ error: `Stock ${upperSymbol} is already registered in the registry.` });
+    }
+
+    await query(
+      `INSERT INTO stocks (symbol, name, market, is_active) VALUES ($1, $2, $3, true)
+       ON CONFLICT (symbol) DO UPDATE SET name = EXCLUDED.name, market = EXCLUDED.market, is_active = true`,
+      [upperSymbol, name.trim(), cleanMarket]
+    );
+
+    console.log(`[Stock Registry] Added new stock: ${upperSymbol} (${name}) on ${cleanMarket}`);
+
+    // Trigger data ingestion asynchronously in background — don't block the response
+    ingestSingleStock(upperSymbol).catch((err) =>
+      console.error(`[Stock Registry] Background ingestion failed for ${upperSymbol}:`, err)
+    );
+
+    return res.status(201).json({
+      message: `Stock ${upperSymbol} successfully added to registry. Data ingestion started in background.`,
+      symbol: upperSymbol,
+      name: name.trim(),
+      market: cleanMarket,
+      ingesting: true
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error adding stock to registry' });
   }
 });
 

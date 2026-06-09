@@ -44,7 +44,10 @@ export const AppLayout: React.FC = () => {
     }
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt,
+      );
     };
   }, []);
 
@@ -197,13 +200,22 @@ export const AppLayout: React.FC = () => {
             zIndex: 199,
             backdropFilter: "blur(12px)",
             boxShadow: "0 4px 10px rgba(0, 0, 0, 0.3)",
-            animation: "slideUp 0.2s ease-out"
+            animation: "slideUp 0.2s ease-out",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, justifyContent: "center", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              flex: 1,
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
             <span>🚀</span>
             <span>
-              {language === "id" 
+              {language === "id"
                 ? "Dapatkan performa optimal dengan menginstal Aplikasi Bot Saham BTST langsung di Home Screen Anda!"
                 : "Get optimal performance by installing BTST Stock Bot App directly on your Home Screen!"}
             </span>
@@ -219,7 +231,7 @@ export const AppLayout: React.FC = () => {
                 cursor: "pointer",
                 padding: "4px 12px",
                 marginLeft: "12px",
-                boxShadow: "0 2px 8px rgba(59, 130, 246, 0.4)"
+                boxShadow: "0 2px 8px rgba(59, 130, 246, 0.4)",
               }}
             >
               {language === "id" ? "Install Sekarang" : "Install Now"}
@@ -236,7 +248,7 @@ export const AppLayout: React.FC = () => {
               cursor: "pointer",
               padding: "4px 8px",
               display: "flex",
-              alignItems: "center"
+              alignItems: "center",
             }}
           >
             ✕
@@ -270,6 +282,7 @@ export const AppLayout: React.FC = () => {
             style={{
               flex: 1,
               overflowY: "auto",
+              overflowX: "hidden",
               padding: isMobile ? "16px 12px 90px" : "24px",
               background:
                 "radial-gradient(circle at top right, rgba(59, 130, 246, 0.05), transparent)",
@@ -511,29 +524,68 @@ export const AppLayout: React.FC = () => {
                 gap: "10px",
               }}
             >
-              <NavLink to="/priority-stocks" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
+              <NavLink
+                to="/priority-stocks"
+                style={moreMenuItemStyle}
+                onClick={() => setIsMoreOpen(false)}
+              >
                 📌 {t("priority")}
               </NavLink>
-              <NavLink to="/notifications" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
+              <NavLink
+                to="/swing-recap"
+                style={moreMenuItemStyle}
+                onClick={() => setIsMoreOpen(false)}
+              >
+                📊 Swing Recap
+              </NavLink>
+              <NavLink
+                to="/notifications"
+                style={moreMenuItemStyle}
+                onClick={() => setIsMoreOpen(false)}
+              >
                 🔔 {t("notifications")}
               </NavLink>
-              <NavLink to="/guide" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
+              <NavLink
+                to="/guide"
+                style={moreMenuItemStyle}
+                onClick={() => setIsMoreOpen(false)}
+              >
                 📖 {t("guide")}
               </NavLink>
-              <NavLink to="/algorithm" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
+              <NavLink
+                to="/algorithm"
+                style={moreMenuItemStyle}
+                onClick={() => setIsMoreOpen(false)}
+              >
                 📈 {t("algorithm")}
               </NavLink>
-              <NavLink to="/registry" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
+              <NavLink
+                to="/registry"
+                style={moreMenuItemStyle}
+                onClick={() => setIsMoreOpen(false)}
+              >
                 🗂️ {t("stock_registry")}
               </NavLink>
-              <NavLink to="/settings" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
+              <NavLink
+                to="/settings"
+                style={moreMenuItemStyle}
+                onClick={() => setIsMoreOpen(false)}
+              >
                 ⚙️ {t("settings")}
               </NavLink>
-              <NavLink to="/data-report" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
+              <NavLink
+                to="/data-report"
+                style={moreMenuItemStyle}
+                onClick={() => setIsMoreOpen(false)}
+              >
                 📊 {t("data_fetch_report")}
               </NavLink>
               {user?.role === "admin" && (
-                <NavLink to="/users" style={moreMenuItemStyle} onClick={() => setIsMoreOpen(false)}>
+                <NavLink
+                  to="/users"
+                  style={moreMenuItemStyle}
+                  onClick={() => setIsMoreOpen(false)}
+                >
                   👥 {t("users")}
                 </NavLink>
               )}

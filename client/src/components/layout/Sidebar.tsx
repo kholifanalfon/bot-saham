@@ -76,6 +76,7 @@ export const Sidebar: React.FC = () => {
         <NavLink to="/" style={navItemStyle}>{t('dashboard')}</NavLink>
         <NavLink to="/screener" style={navItemStyle}>{t('screener')}</NavLink>
         <NavLink to="/portfolio" style={navItemStyle}>{t('portfolio')}</NavLink>
+        <NavLink to="/swing-recap" style={navItemStyle}>📊 Swing Recap</NavLink>
         <NavLink to="/priority-stocks" style={navItemStyle}>{t('priority')}</NavLink>
         <NavLink to="/ai" style={navItemStyle}>{t('gemini_evaluation')}</NavLink>
         <NavLink to="/notifications" style={navItemStyle}>{t('notifications')}</NavLink>

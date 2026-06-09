@@ -276,10 +276,12 @@ export async function runIngestionPipeline(
           volume = targetCandle.volume || 0;
 
           // C. Calculate technical indicators (RSI, MACD, EMAs) on the sliced history
-          const prices = slicedHistory.map((h) => h.close);
+          const highs = slicedHistory.map((h) => h.high);
+          const lows = slicedHistory.map((h) => h.low);
+          const closes = slicedHistory.map((h) => h.close);
           const volumes = slicedHistory.map((h) => h.volume);
 
-          const analysis = performFullAnalysis(prices, volumes);
+          const analysis = performFullAnalysis(highs, lows, closes, volumes);
           const isNewest = lastCandleDate === history[history.length - 1].date;
 
           // D. Save combined raw and technical data to stock_data
@@ -428,10 +430,12 @@ export async function runHistoricalIngestion(
         continue;
       }
 
-      const prices = subHistory.map((h) => h.close);
+      const highs = subHistory.map((h) => h.high);
+      const lows = subHistory.map((h) => h.low);
+      const closes = subHistory.map((h) => h.close);
       const volumes = subHistory.map((h) => h.volume);
 
-      const analysis = performFullAnalysis(prices, volumes);
+      const analysis = performFullAnalysis(highs, lows, closes, volumes);
 
       await query(
         `INSERT INTO stock_data (
@@ -494,7 +498,7 @@ export async function runHistoricalIngestion(
 
     await updateIngestionLogStatus(
       logId,
-      "success",
+      'success',
       ingestedCount,
       `Successfully ingested ${ingestedCount} daily candles for ${symbol}`,
     );
@@ -506,10 +510,103 @@ export async function runHistoricalIngestion(
     );
     await updateIngestionLogStatus(
       logId,
-      "error",
+      'error',
       0,
       error.message || String(error),
     );
     return { success: false, count: 0, error: error.message || String(error) };
+  }
+}
+
+/**
+ * Fetches 3-month price history for a single newly-registered stock,
+ * calculates all technical indicators, and saves the latest active record.
+ * Designed to be called immediately after a stock is added to the registry.
+ */
+export async function ingestSingleStock(
+  symbol: string,
+): Promise<{ success: boolean; error?: string }> {
+  console.log(`[SingleIngest] Starting data fetch for newly added stock: ${symbol}`);
+
+  const logId = await logIngestionActivity({
+    status: 'running',
+    triggerType: 'manual',
+    symbol,
+    details: `Initial data fetch after registry add for ${symbol}`,
+  });
+
+  try {
+    const history = await getHistoricalData(symbol, '3mo');
+
+    if (history.length < 50) {
+      throw new Error(
+        `Insufficient historical data for ${symbol} (got ${history.length} bars, need >= 50)`,
+      );
+    }
+
+    const lastCandle = history[history.length - 1];
+    const prevCandle = history[history.length - 2];
+
+    const price = lastCandle.close;
+    const high = lastCandle.high;
+    const low = lastCandle.low;
+    const open = lastCandle.open;
+    const volume = lastCandle.volume || 0;
+    const prevClose = prevCandle ? prevCandle.close : open;
+    const changePercent = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
+    const lastDate = lastCandle.date;
+
+    const highs = history.map((h) => h.high);
+    const lows = history.map((h) => h.low);
+    const closes = history.map((h) => h.close);
+    const volumes = history.map((h) => h.volume);
+
+    const analysis = performFullAnalysis(highs, lows, closes, volumes);
+
+    await query(
+      `INSERT INTO stock_data (
+         date, symbol, price, change_percent, high, low, open, previous_close, volume,
+         swing_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, TRUE)
+       ON CONFLICT (date, symbol) DO UPDATE SET
+         price = EXCLUDED.price,
+         change_percent = EXCLUDED.change_percent,
+         high = EXCLUDED.high,
+         low = EXCLUDED.low,
+         open = EXCLUDED.open,
+         previous_close = EXCLUDED.previous_close,
+         volume = EXCLUDED.volume,
+         swing_score = EXCLUDED.swing_score,
+         rsi = EXCLUDED.rsi,
+         macd_histogram = EXCLUDED.macd_histogram,
+         ema9 = EXCLUDED.ema9,
+         ema21 = EXCLUDED.ema21,
+         ema50 = EXCLUDED.ema50,
+         is_active = EXCLUDED.is_active`,
+      [
+        lastDate, symbol, price, changePercent, high, low, open, prevClose, volume,
+        analysis.swingScore, analysis.rsi,
+        (analysis.macd as any).histogram || 0,
+        analysis.ema9, analysis.ema21, analysis.ema50,
+      ],
+    );
+
+    await query(
+      `UPDATE stock_data SET is_active = false WHERE symbol = $1 AND date <> $2`,
+      [symbol, lastDate],
+    );
+
+    await updateIngestionLogStatus(
+      logId, 'success', 1,
+      `Initial data ingested for ${symbol}: price=${price}, swingScore=${analysis.swingScore.toFixed(1)}`,
+    );
+
+    console.log(`[SingleIngest] Successfully ingested latest data for ${symbol} (score: ${analysis.swingScore.toFixed(1)}).`);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`[SingleIngest] Failed to ingest data for ${symbol}:`, error);
+    await updateIngestionLogStatus(logId, 'error', 0, error.message || String(error));
+    return { success: false, error: error.message || String(error) };
   }
 }

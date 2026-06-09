@@ -18,6 +18,7 @@ import { AlgorithmExplanation } from './pages/AlgorithmExplanation';
 import { Settings } from './pages/Settings';
 import { DataFetchReport } from './pages/DataFetchReport';
 import { StockRegistry } from './pages/StockRegistry';
+import { SwingRecap } from './pages/SwingRecap';
 
 import './styles/globals.css';
 
@@ -40,6 +41,7 @@ export const App: React.FC = () => {
             <Route path="/stock/:symbol" element={<StockDetailPage />} />
             <Route path="/ai" element={<AIAnalysis />} />
             <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/swing-recap" element={<SwingRecap />} />
             <Route path="/priority-stocks" element={<PriorityStocks />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/guide" element={<ApiGuide />} />

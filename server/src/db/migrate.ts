@@ -59,8 +59,15 @@ async function migrate() {
         name VARCHAR(150) NOT NULL,
         market VARCHAR(10) NOT NULL, -- 'IDX' or 'US'
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        category VARCHAR(30) NOT NULL DEFAULT 'core', -- 'core' or 'swing_candidate'
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Add category column if it doesn't exist (for existing databases)
+    await query(`
+      ALTER TABLE stocks
+      ADD COLUMN IF NOT EXISTS category VARCHAR(30) NOT NULL DEFAULT 'core'
     `);
 
     // 4. Create Stock Data Table with composite PK (date, symbol)

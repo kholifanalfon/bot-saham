@@ -51,10 +51,12 @@ router.post('/analyze', aiLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Insufficient historical data (minimum 50 bars required)' });
     }
 
-    const prices = history.map((h) => h.close);
+    const highs = history.map((h) => h.high);
+    const lows = history.map((h) => h.low);
+    const closes = history.map((h) => h.close);
     const volume = history.map((h) => h.volume);
 
-    const technicals = performFullAnalysis(prices, volume);
+    const technicals = performFullAnalysis(highs, lows, closes, volume);
     const indicators = {
       rsi: technicals.rsi,
       macd: {

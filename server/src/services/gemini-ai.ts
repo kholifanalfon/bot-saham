@@ -299,3 +299,59 @@ export async function askChatAssistant(
   }
 }
 
+
+export async function lookupStockInfo(
+  symbol: string,
+): Promise<{ name: string; market: string; fullSymbol: string; found: boolean }> {
+  const apiKey = await getSetting("gemini_api_key");
+  const modelName = (await getSetting("gemini_model")) || "gemini-1.5-flash";
+
+  const upperSymbol = symbol.trim().toUpperCase();
+
+  let genAI: GoogleGenerativeAI | null = null;
+  if (apiKey && apiKey !== "your_key_here") {
+    genAI = new GoogleGenerativeAI(apiKey);
+  }
+
+  if (!genAI) {
+    const isIDX = !upperSymbol.includes(".");
+    const fullSymbol = isIDX ? `${upperSymbol}.JK` : upperSymbol;
+    return { name: upperSymbol, market: isIDX ? "IDX" : "US", fullSymbol, found: false };
+  }
+
+  const prompt = `You are a financial data assistant. Given the stock ticker code "${upperSymbol}", identify:
+1. The full official company name.
+2. The stock market: "IDX" for Indonesian Stock Exchange, "US" for NYSE/NASDAQ.
+3. The correct Yahoo Finance ticker symbol (e.g. "BBCA.JK" for IDX, "AAPL" for US).
+
+Rules:
+- Indonesian tickers (e.g. BBCA, TLKM, ASII, GOTO): append ".JK" suffix.
+- US tickers (e.g. AAPL, GOOGL, TSLA): keep as-is.
+- If the stock does not exist or you are not confident, set "found": false.
+- Respond ONLY with a valid JSON object. No markdown or extra text.
+
+JSON format: {"name":"Full Company Name","market":"IDX","fullSymbol":"BBCA.JK","found":true}`;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(jsonStr);
+    return {
+      name: parsed.name || upperSymbol,
+      market: parsed.market === "US" ? "US" : "IDX",
+      fullSymbol: parsed.fullSymbol || upperSymbol,
+      found: !!parsed.found,
+    };
+  } catch (error) {
+    console.error("[Gemini] lookupStockInfo error:", error);
+    const isIDX = !upperSymbol.includes(".");
+    return {
+      name: upperSymbol,
+      market: isIDX ? "IDX" : "US",
+      fullSymbol: isIDX ? `${upperSymbol}.JK` : upperSymbol,
+      found: false,
+    };
+  }
+}
