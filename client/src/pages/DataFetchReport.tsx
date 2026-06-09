@@ -18,6 +18,13 @@ export const DataFetchReport: React.FC = () => {
   const [logs, setLogs] = useState<IngestionLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [errorLogs, setErrorLogs] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Ingestion Form State
   const [availableStocks, setAvailableStocks] = useState<{ symbol: string; name: string }[]>([]);
@@ -171,7 +178,7 @@ export const DataFetchReport: React.FC = () => {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "24px" }}>
         {/* Trigger Form Card */}
-        <div className="glass-panel" style={{ padding: "24px",width: "calc(100vw - 25px)" }}>
+        <div className="glass-panel" style={{ padding: "24px", ...(isMobile ? { width: "calc(100vw - 25px)" } : {}) }}>
           <h2 style={{ fontSize: "1.2rem", fontWeight: 600, marginBottom: "16px", color: "#f8fafc" }}>
             {language === "id" ? "Trigger Pengambilan Data Historis" : "Trigger Historical Ingestion"}
           </h2>
@@ -499,7 +506,7 @@ export const DataFetchReport: React.FC = () => {
         </div>
 
         {/* History Log Card */}
-        <div className="glass-panel" style={{ padding: "24px", width: "calc(100vw - 25px)" }}>
+        <div className="glass-panel" style={{ padding: "24px", ...(isMobile ? { width: "calc(100vw - 25px)" } : {}) }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <h2 style={{ fontSize: "1.2rem", fontWeight: 600, color: "#f8fafc" }}>
               {language === "id" ? "Riwayat Pengambilan Data" : "Data Fetch Logs History"}

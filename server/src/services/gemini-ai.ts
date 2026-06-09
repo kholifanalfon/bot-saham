@@ -162,7 +162,10 @@ export async function analyzeStock(
   }
 }
 
-export async function getMarketSentiment(news: any[], language: string = "id"): Promise<any> {
+export async function getMarketSentiment(
+  news: any[],
+  language: string = "id",
+): Promise<any> {
   const apiKey = await getSetting("gemini_api_key");
   const modelName = (await getSetting("gemini_model")) || "gemini-1.5-flash";
 
@@ -171,22 +174,33 @@ export async function getMarketSentiment(news: any[], language: string = "id"): 
     genAI = new GoogleGenerativeAI(apiKey);
   }
 
-  const langName = language === "id" ? "Indonesian (Bahasa Indonesia)" : "English";
+  const langName =
+    language === "id" ? "Indonesian (Bahasa Indonesia)" : "English";
 
   if (!genAI) {
     if (language === "id") {
       return {
         sentiment: "Bullish",
         score: 68,
-        summary: "Sektor perbankan dan infrastruktur Indonesia mempertahankan momentum kenaikan yang kuat. Volume pembelian tetap konsisten di atas rata-rata pergerakan 20 hari.",
-        sectors: ["Finansial: Bullish", "Infrastruktur: Netral", "Teknologi: Volatil"]
+        summary:
+          "Sektor perbankan dan infrastruktur Indonesia mempertahankan momentum kenaikan yang kuat. Volume pembelian tetap konsisten di atas rata-rata pergerakan 20 hari.",
+        sectors: [
+          "Finansial: Bullish",
+          "Infrastruktur: Netral",
+          "Teknologi: Volatil",
+        ],
       };
     }
     return {
       sentiment: "Bullish",
       score: 68,
-      summary: "Indonesian banking and infrastructure sectors maintain strong upward momentum. Buying volume remains consistent above the 20-day moving average.",
-      sectors: ["Financials: Bullish", "Infrastructure: Neutral", "Technology: Volatile"]
+      summary:
+        "Indonesian banking and infrastructure sectors maintain strong upward momentum. Buying volume remains consistent above the 20-day moving average.",
+      sectors: [
+        "Financials: Bullish",
+        "Infrastructure: Neutral",
+        "Technology: Volatile",
+      ],
     };
   }
 
@@ -227,15 +241,25 @@ export async function getMarketSentiment(news: any[], language: string = "id"): 
       return {
         sentiment: "Netral",
         score: 50,
-        summary: "Tidak dapat menganalisis sentimen pasar karena kesalahan sistem atau API.",
-        sectors: ["Finansial: Netral", "Infrastruktur: Netral", "Teknologi: Netral"]
+        summary:
+          "Tidak dapat menganalisis sentimen pasar karena kesalahan sistem atau API.",
+        sectors: [
+          "Finansial: Netral",
+          "Infrastruktur: Netral",
+          "Teknologi: Netral",
+        ],
       };
     }
     return {
       sentiment: "Neutral",
       score: 50,
-      summary: "Unable to analyze market sentiment due to system or API request error.",
-      sectors: ["Financials: Neutral", "Infrastructure: Neutral", "Technology: Neutral"]
+      summary:
+        "Unable to analyze market sentiment due to system or API request error.",
+      sectors: [
+        "Financials: Neutral",
+        "Infrastructure: Neutral",
+        "Technology: Neutral",
+      ],
     };
   }
 }
@@ -243,7 +267,7 @@ export async function getMarketSentiment(news: any[], language: string = "id"): 
 export async function askChatAssistant(
   message: string,
   chatHistory: any[],
-  language: string = "id"
+  language: string = "id",
 ): Promise<string> {
   const apiKey = await getSetting("gemini_api_key");
   const modelName = (await getSetting("gemini_model")) || "gemini-1.5-flash";
@@ -272,7 +296,7 @@ export async function askChatAssistant(
       - **Stop Loss (SL)**: Explain the invalidation level in detail with technical references, such as setting SL slightly below the key support lines like EMA 50, below the recent swing low, or exiting when a bearish MACD crossover is confirmed.
       
       Keep answers professional, insightful, and detailed. Prefix your responses with '[Spesialis Swing Trader]' or '[Swing Trading Specialist]' depending on the output language.
-      Always respond in the requested language (which is ${language === "id" ? "Indonesian (Bahasa Indonesia)" : "English"}).`
+      Always respond in the requested language (which is ${language === "id" ? "Indonesian (Bahasa Indonesia)" : "English"}).`,
     });
 
     // Map frontend chat history format to Gemini SDK format
@@ -281,13 +305,13 @@ export async function askChatAssistant(
     // Clean history from first welcome message
     const formattedHistory = chatHistory
       .filter((_, idx) => idx > 0)
-      .map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.text }]
+      .map((msg) => ({
+        role: msg.sender === "user" ? "user" : "model",
+        parts: [{ text: msg.text }],
       }));
 
     const chat = model.startChat({
-      history: formattedHistory
+      history: formattedHistory,
     });
 
     const result = await chat.sendMessage(message);
@@ -299,10 +323,12 @@ export async function askChatAssistant(
   }
 }
 
-
-export async function lookupStockInfo(
-  symbol: string,
-): Promise<{ name: string; market: string; fullSymbol: string; found: boolean }> {
+export async function lookupStockInfo(symbol: string): Promise<{
+  name: string;
+  market: string;
+  fullSymbol: string;
+  found: boolean;
+}> {
   const apiKey = await getSetting("gemini_api_key");
   const modelName = (await getSetting("gemini_model")) || "gemini-1.5-flash";
 
@@ -316,7 +342,12 @@ export async function lookupStockInfo(
   if (!genAI) {
     const isIDX = !upperSymbol.includes(".");
     const fullSymbol = isIDX ? `${upperSymbol}.JK` : upperSymbol;
-    return { name: upperSymbol, market: isIDX ? "IDX" : "US", fullSymbol, found: false };
+    return {
+      name: upperSymbol,
+      market: isIDX ? "IDX" : "US",
+      fullSymbol,
+      found: false,
+    };
   }
 
   const prompt = `You are a financial data assistant. Given the stock ticker code "${upperSymbol}", identify:
@@ -336,7 +367,10 @@ JSON format: {"name":"Full Company Name","market":"IDX","fullSymbol":"BBCA.JK","
     const model = genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const jsonStr = text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
     const parsed = JSON.parse(jsonStr);
     return {
       name: parsed.name || upperSymbol,
@@ -353,5 +387,93 @@ JSON format: {"name":"Full Company Name","market":"IDX","fullSymbol":"BBCA.JK","
       fullSymbol: isIDX ? `${upperSymbol}.JK` : upperSymbol,
       found: false,
     };
+  }
+}
+
+export interface TradeTagInput {
+  symbol: string;
+  buyDate: string;
+  sellDate: string;
+  buyPrice: number;
+  sellPrice: number;
+  shares: number;
+  pnlPercent: number;
+  holdingDays: number;
+  notes?: string;
+}
+
+export async function suggestTradeTags(
+  trade: TradeTagInput,
+): Promise<string[]> {
+  const apiKey = await getSetting("gemini_api_key");
+  const modelName = (await getSetting("gemini_model")) || "gemini-1.5-flash";
+
+  const isWin = trade.pnlPercent > 0;
+  const absPercent = Math.abs(trade.pnlPercent);
+
+  // Rule-based fallback tags (always computed for supplementing AI)
+  const fallbackTags: string[] = [];
+
+  if (isWin) {
+    if (absPercent >= 10) fallbackTags.push("Big_Winner");
+    else if (absPercent >= 5) fallbackTags.push("Moderate_Win");
+    else fallbackTags.push("Small_Win");
+  } else {
+    if (absPercent >= 10) fallbackTags.push("Big_Loss");
+    else if (absPercent >= 5) fallbackTags.push("Moderate_Loss");
+    else fallbackTags.push("Small_Loss");
+  }
+
+  if (trade.holdingDays <= 3) fallbackTags.push("Quick_Trade");
+  else if (trade.holdingDays <= 14) fallbackTags.push("Short_Swing");
+  else if (trade.holdingDays <= 45) fallbackTags.push("Medium_Swing");
+  else fallbackTags.push("Long_Hold");
+
+  if (!apiKey || apiKey === "your_key_here") {
+    // No API key — return smart rule-based tags
+    return [...new Set(fallbackTags)];
+  }
+
+  const prompt = `You are an expert swing trader AI. A trader just closed the following trade:
+
+Symbol: ${trade.symbol}
+Buy Date: ${trade.buyDate}
+Sell Date: ${trade.sellDate}
+Buy Price: ${trade.buyPrice}
+Sell Price: ${trade.sellPrice}
+Shares: ${trade.shares}
+PnL%: ${trade.pnlPercent.toFixed(2)}%
+Holding Days: ${trade.holdingDays}
+${trade.notes ? `Trader Notes: ${trade.notes}` : ""}
+
+Based on this trade data, suggest EXACTLY 2 pattern tags that best describe the trading setup or outcome for this trade. Choose ONLY from these standard tags or create relevant variants:
+
+Setups: BB_Squeeze, Bounce_EMA20, Bounce_EMA50, Bounce_EMA200, Breakout_Resistance, Breakout_Consolidation, MACD_Cross_Bullish, RSI_Oversold_Bounce, RSI_Divergence, Gap_Up_Play, Gap_Down_Fade, Volume_Surge, News_Catalyst, Earnings_Play, Sector_Rotation, Trend_Following, Counter_Trend, Support_Bounce, Resistance_Rejection, Golden_Cross, Death_Cross, Cup_Handle, Double_Bottom, Double_Top, Head_Shoulders
+
+Outcomes: Quick_Scalp, Swing_Success, Averaging_Down, Stop_Loss_Hit, Partial_Profit, Full_Position_Exit, FOMO_Entry, Discipline_Exit, Patience_Win
+
+Context: ${isWin ? "This was a WINNING trade" : "This was a LOSING trade"}. Holding period was ${trade.holdingDays} days.
+
+Respond ONLY with a JSON array of EXACTLY 2 tag strings. Example: ["BB_Squeeze", "Bounce_EMA50"]
+Do NOT include any other text, only the JSON array.`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    const jsonStr = text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+    const parsed = JSON.parse(jsonStr);
+    if (Array.isArray(parsed)) {
+      // Take AI tags first, trim to exactly 2
+      return [...new Set(parsed)].slice(0, 2);
+    }
+    return fallbackTags;
+  } catch (error) {
+    console.error("[Gemini] suggestTradeTags error:", error);
+    return fallbackTags;
   }
 }

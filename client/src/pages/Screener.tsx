@@ -398,6 +398,7 @@ export const Screener: React.FC = () => {
 
             .react-datepicker-popper {
               z-index: 9999 !important;
+              left: 50px !important;
             }
 
             /* Calendar Dropdown Premium Dark theme */

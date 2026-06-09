@@ -7,6 +7,7 @@ async function migrate() {
       "[Migration] Refresh option detected. Dropping existing tables...",
     );
     const tables = [
+      "trade_journals",
       "watchlist",
       "triggered_alerts",
       "alerts",
@@ -178,6 +179,27 @@ async function migrate() {
         records_count INTEGER DEFAULT 0,
         details TEXT,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 12. Create Trade Journals Table (for AI-tagged trade journaling)
+    await query(`
+      CREATE TABLE IF NOT EXISTS trade_journals (
+        id          VARCHAR(50) PRIMARY KEY,
+        user_id     VARCHAR(50) NOT NULL,
+        symbol      VARCHAR(20) NOT NULL,
+        sell_date   VARCHAR(30) NOT NULL,
+        buy_date    VARCHAR(30) NOT NULL,
+        buy_price   NUMERIC(12,2),
+        sell_price  NUMERIC(12,2),
+        shares      NUMERIC(12,4),
+        pnl_percent NUMERIC(10,4),
+        notes       TEXT,
+        tags        TEXT[] NOT NULL DEFAULT '{}',
+        ai_tags     TEXT[] NOT NULL DEFAULT '{}',
+        created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (user_id, symbol, sell_date, buy_date)
       )
     `);
 

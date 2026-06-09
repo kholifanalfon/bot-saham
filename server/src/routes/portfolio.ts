@@ -7,6 +7,13 @@ import {
   getPortfolioHoldings
 } from '../services/portfolio.js';
 import { query } from '../services/db.js';
+import {
+  upsertJournal,
+  getJournalsByUser,
+  deleteJournal,
+  getTagAnalytics,
+} from '../services/portfolio-journal.js';
+import { suggestTradeTags } from '../services/gemini-ai.js';
 
 const router = Router();
 
@@ -159,6 +166,104 @@ router.get('/swing-recap', async (req: AuthRequest, res) => {
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Error computing swing recap' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// TRADE JOURNALS — CRUD
+// ─────────────────────────────────────────────────────────────
+
+// GET /api/portfolio/journals — list all journals for user
+router.get('/journals', async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  try {
+    const journals = await getJournalsByUser(userId);
+    return res.status(200).json(journals);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error fetching journals' });
+  }
+});
+
+// GET /api/portfolio/journals/tag-analytics — win rate per tag
+router.get('/journals/tag-analytics', async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  try {
+    const analytics = await getTagAnalytics(userId);
+    return res.status(200).json(analytics);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error computing tag analytics' });
+  }
+});
+
+// POST /api/portfolio/journals — create or update a journal entry
+router.post('/journals', async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const { symbol, sellDate, buyDate, buyPrice, sellPrice, shares, pnlPercent, notes, tags, aiTags } = req.body;
+
+  if (!symbol || !sellDate || !buyDate) {
+    return res.status(400).json({ error: 'symbol, sellDate, buyDate are required' });
+  }
+
+  try {
+    const journal = await upsertJournal(userId, symbol, sellDate, buyDate, {
+      buyPrice, sellPrice, shares, pnlPercent, notes, tags, aiTags,
+    });
+    return res.status(200).json(journal);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error saving journal' });
+  }
+});
+
+// PATCH /api/portfolio/journals/update — update notes & tags
+router.patch('/journals/update', async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  const { symbol, sellDate, buyDate, notes, tags } = req.body;
+
+  if (!symbol || !sellDate || !buyDate) {
+    return res.status(400).json({ error: 'symbol, sellDate, buyDate are required' });
+  }
+
+  try {
+    const journal = await upsertJournal(userId, symbol, sellDate, buyDate, { notes, tags });
+    return res.status(200).json(journal);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error updating journal' });
+  }
+});
+
+// DELETE /api/portfolio/journals/:id — delete a journal
+router.delete('/journals/:id', async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
+  try {
+    const success = await deleteJournal(req.params.id, userId);
+    if (!success) return res.status(404).json({ error: 'Journal not found or unauthorized' });
+    return res.status(200).json({ message: 'Journal deleted' });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error deleting journal' });
+  }
+});
+
+// POST /api/portfolio/journals/suggest-tags — AI tag suggestion
+router.post('/journals/suggest-tags', async (req: AuthRequest, res) => {
+  const { symbol, buyDate, sellDate, buyPrice, sellPrice, shares, pnlPercent, holdingDays, notes } = req.body;
+
+  if (!symbol || !buyDate || !sellDate) {
+    return res.status(400).json({ error: 'symbol, buyDate, sellDate required' });
+  }
+
+  try {
+    const tags = await suggestTradeTags({
+      symbol, buyDate, sellDate,
+      buyPrice: parseFloat(buyPrice) || 0,
+      sellPrice: parseFloat(sellPrice) || 0,
+      shares: parseFloat(shares) || 0,
+      pnlPercent: parseFloat(pnlPercent) || 0,
+      holdingDays: parseInt(holdingDays) || 0,
+      notes,
+    });
+    return res.status(200).json({ tags });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Error suggesting tags' });
   }
 });
 

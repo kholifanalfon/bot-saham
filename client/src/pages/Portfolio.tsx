@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguageStore } from '../store/useLanguageStore';
 
+const API_URL = 'http://localhost:3001';
+
 interface PortfolioHolding {
   symbol: string;
   shares: number;
@@ -74,23 +76,74 @@ export const Portfolio: React.FC = () => {
     loadPortfolioData();
   }, []);
 
+  // Silently call AI tag suggestion + save journal in background — no user interaction needed
+  const autoTagAndSave = (ctx: {
+    symbol: string;
+    sellDate: string;
+    sellPrice: number;
+    shares: number;
+  }) => {
+    // Fire-and-forget: runs completely in background
+    (async () => {
+      try {
+        const tagRes = await fetch(`${API_URL}/api/portfolio/journals/suggest-tags`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            symbol: ctx.symbol,
+            buyDate: ctx.sellDate,
+            sellDate: ctx.sellDate,
+            buyPrice: 0,
+            sellPrice: ctx.sellPrice,
+            shares: ctx.shares,
+            pnlPercent: 0,
+            holdingDays: 0,
+          }),
+        });
+        const aiTags: string[] = tagRes.ok ? (await tagRes.json()).tags ?? [] : [];
+
+        await fetch(`${API_URL}/api/portfolio/journals`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            symbol: ctx.symbol,
+            sellDate: ctx.sellDate,
+            buyDate: ctx.sellDate,
+            sellPrice: ctx.sellPrice,
+            buyPrice: 0,
+            shares: ctx.shares,
+            pnlPercent: 0,
+            notes: null,
+            tags: [],
+            aiTags,
+          }),
+        });
+        console.log(`[Journal] Auto-saved journal for ${ctx.symbol} with AI tags:`, aiTags);
+      } catch (e) {
+        console.warn('[Journal] Background auto-tag failed (non-blocking):', e);
+      }
+    })();
+  };
+
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!symbol || !shares || !price) return;
+    const isSell = type === 'sell';
+    const sellDate = new Date().toISOString().split('T')[0];
 
     try {
-      const response = await fetch('http://localhost:3001/api/portfolio/transaction', {
+      const response = await fetch(`${API_URL}/api/portfolio/transaction`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           symbol: symbol.toUpperCase(),
           type,
           shares: parseInt(shares),
           price: parseFloat(price),
-          date: new Date().toISOString().split('T')[0]
+          date: sellDate
         })
       });
 
@@ -103,9 +156,17 @@ export const Portfolio: React.FC = () => {
       setShares('');
       setPrice('');
       setShowModal(false);
-      
-      // Reload everything to get calculated holdings dynamically
       await loadPortfolioData();
+
+      // After a SELL — auto tag in background, no confirmation needed
+      if (isSell) {
+        autoTagAndSave({
+          symbol: symbol.toUpperCase(),
+          sellDate,
+          sellPrice: parseFloat(price),
+          shares: parseInt(shares),
+        });
+      }
     } catch (err: any) {
       console.error('Transaction error:', err);
       alert(`Error recording transaction: ${err.message}`);
@@ -126,24 +187,20 @@ export const Portfolio: React.FC = () => {
     }
   };
 
-  const handleQuickSell = async (symbol: string, shares: number, currentPrice: number) => {
-    if (!confirm(`Apakah Anda yakin ingin menjual seluruh (${shares}) saham ${symbol} di harga ${currentPrice}?`)) return;
+  const handleQuickSell = async (sym: string, sh: number, currentPrice: number) => {
+    if (!confirm(`Apakah Anda yakin ingin menjual seluruh (${sh}) saham ${sym} di harga ${currentPrice}?`)) return;
+    const sellDate = new Date().toISOString().split('T')[0];
     try {
-      const response = await fetch('http://localhost:3001/api/portfolio/transaction', {
+      const response = await fetch(`${API_URL}/api/portfolio/transaction`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          symbol: symbol,
-          type: 'sell',
-          shares: shares,
-          price: currentPrice,
-          date: new Date().toISOString().split('T')[0]
-        })
+        body: JSON.stringify({ symbol: sym, type: 'sell', shares: sh, price: currentPrice, date: sellDate })
       });
       if (!response.ok) throw new Error('Failed to record sell transaction');
       await loadPortfolioData();
-      alert(`Berhasil menjual ${shares} saham ${symbol}.`);
+      // Auto-tag in background
+      autoTagAndSave({ symbol: sym, sellDate, sellPrice: currentPrice, shares: sh });
     } catch (err: any) {
       alert(`Error saat menjual saham: ${err.message}`);
     }

@@ -52,6 +52,12 @@ export const StockDetailPage: React.FC = () => {
   const [sellShares, setSellShares] = useState("100");
   const [transacting, setTransacting] = useState(false);
 
+  // Position Sizing Calculator state
+  const [sizerCapital, setSizerCapital] = useState("");
+  const [sizerRisk, setSizerRisk] = useState("2");
+  const [sizerSl, setSizerSl] = useState("4");
+  const [sizerTp, setSizerTp] = useState("8");
+
   const [showEma9, setShowEma9] = useState(false);
   const [showEma20, setShowEma20] = useState(false);
   const [showEma21, setShowEma21] = useState(false);
@@ -1335,6 +1341,326 @@ export const StockDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Position Sizing Calculator ── */}
+      {(() => {
+        const isIDX = activeSymbol.endsWith(".JK");
+        const LOT_SIZE = isIDX ? 100 : 1; // IDX: 1 lot = 100 lembar, US: 1 lot = 1 share
+        const capital = parseFloat(sizerCapital.replace(/[^0-9.]/g, "")) || 0;
+
+        // Format capital for display with thousand separators
+        const formatCapital = (raw: string) => {
+          const num = raw.replace(/[^0-9]/g, "");
+          if (!num) return "";
+          return parseInt(num, 10).toLocaleString(isIDX ? "id-ID" : "en-US");
+        };
+        const displayCapital = formatCapital(sizerCapital);
+        const riskPct = parseFloat(sizerRisk) || 0;
+        const slPct = parseFloat(sizerSl) || 0;
+        const tpPct = parseFloat(sizerTp) || 0;
+
+        const riskAmount = capital * (riskPct / 100);
+        const slPerShare = currentPrice * (slPct / 100);
+
+        // Lot limit from risk budget: berapa lot yang SL-nya ≤ riskAmount
+        const maxSharesFromRisk = slPerShare > 0 ? Math.floor(riskAmount / slPerShare) : 0;
+        const lotsFromRisk = Math.floor(maxSharesFromRisk / LOT_SIZE);
+
+        // Lot limit from capital: berapa lot yang bisa dibeli dari modal
+        const lotsFromCapital = currentPrice > 0 ? Math.floor(capital / (currentPrice * LOT_SIZE)) : 0;
+
+        // Pakai yang lebih kecil agar tidak melebihi modal DAN tidak melebihi risk budget
+        const recommendedLots = Math.min(lotsFromRisk, lotsFromCapital);
+        const isCapitalLimited = lotsFromCapital < lotsFromRisk; // modal jadi pembatas, bukan risk
+
+        const actualShares = recommendedLots * LOT_SIZE;
+        const totalInvestment = actualShares * currentPrice;
+        const tpPrice = currentPrice * (1 + tpPct / 100);
+        const slPrice = currentPrice * (1 - slPct / 100);
+        const expectedProfit = actualShares * (tpPrice - currentPrice);
+        const maxLoss = actualShares * slPerShare;
+        const rrRatio = maxLoss > 0 ? (expectedProfit / maxLoss).toFixed(2) : "–";
+        // Effective risk % = actual loss jika SL tersentuh ÷ modal
+        const effectiveRiskPct = capital > 0 && maxLoss > 0 ? (maxLoss / capital) * 100 : 0;
+
+        const fmtIDR = (v: number) =>
+          v.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+        return (
+          <div
+            className="glass-panel"
+            style={{
+              padding: "28px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "20px",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            {/* Decorative accent top bar */}
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: "linear-gradient(90deg,#6366f1,#8b5cf6,#ec4899)" }} />
+
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <div style={{
+                width: "36px", height: "36px", borderRadius: "10px",
+                background: "linear-gradient(135deg,#6366f1,#8b5cf6)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "1rem", boxShadow: "0 4px 12px rgba(99,102,241,0.35)"
+              }}>📐</div>
+              <div>
+                <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#f1f5f9", margin: 0 }}>
+                  {language === "id" ? "Position Sizing Calculator" : "Position Sizing Calculator"}
+                </h3>
+                <p style={{ fontSize: "0.75rem", color: "#64748b", margin: 0 }}>
+                  {language === "id"
+                    ? `Hitung ukuran posisi optimal berdasarkan modal & risiko Anda • ${isIDX ? "1 lot = 100 lembar" : "1 lot = 1 share"}`
+                    : `Calculate optimal position size based on capital & risk • ${isIDX ? "1 lot = 100 shares" : "1 lot = 1 share"}`}
+                </p>
+              </div>
+              <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                <div style={{ fontSize: "0.7rem", color: "#475569", fontWeight: 600 }}>HARGA SAAT INI</div>
+                <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#60a5fa" }}>
+                  {isIDX ? "Rp " : "$ "}{currentPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+
+            {/* Inputs row */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "14px" }}>
+
+              {/* Modal */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {language === "id" ? "💰 Modal Tersedia" : "💰 Available Capital"}
+                </label>
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b", fontSize: "0.85rem", fontWeight: 600 }}>
+                    {isIDX ? "Rp" : "$"}
+                  </span>
+                  <input
+                    id="sizer-capital"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder={isIDX ? "10.000.000" : "10,000"}
+                    value={displayCapital}
+                    onChange={(e) => {
+                      // Strip all non-digit chars, store raw
+                      const raw = e.target.value.replace(/[^0-9]/g, "");
+                      setSizerCapital(raw);
+                    }}
+                    style={{
+                      width: "100%", padding: "10px 10px 10px 36px",
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: "8px", color: "#f1f5f9",
+                      fontSize: "0.9rem", outline: "none", boxSizing: "border-box",
+                      letterSpacing: "0.04em",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Risk % */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  🎯 {language === "id" ? "Risiko per Trade" : "Risk per Trade"}
+                </label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    id="sizer-risk"
+                    type="number"
+                    min="0.1" max="20" step="0.5"
+                    value={sizerRisk}
+                    onChange={(e) => setSizerRisk(e.target.value)}
+                    style={{
+                      width: "100%", padding: "10px 32px 10px 12px",
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: "8px", color: "#f1f5f9",
+                      fontSize: "0.9rem", outline: "none", boxSizing: "border-box",
+                    }}
+                  />
+                  <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b", fontSize: "0.85rem", fontWeight: 600 }}>%</span>
+                </div>
+                <input type="range" min="0.5" max="10" step="0.5" value={sizerRisk}
+                  onChange={(e) => setSizerRisk(e.target.value)}
+                  style={{ accentColor: "#6366f1", cursor: "pointer", margin: 0 }} />
+              </div>
+
+              {/* Stop Loss % */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#f87171", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  🛑 Stop Loss
+                </label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    id="sizer-sl"
+                    type="number"
+                    min="0.5" max="30" step="0.5"
+                    value={sizerSl}
+                    onChange={(e) => setSizerSl(e.target.value)}
+                    style={{
+                      width: "100%", padding: "10px 32px 10px 12px",
+                      background: "rgba(248,113,113,0.06)",
+                      border: "1px solid rgba(248,113,113,0.2)",
+                      borderRadius: "8px", color: "#fca5a5",
+                      fontSize: "0.9rem", outline: "none", boxSizing: "border-box",
+                    }}
+                  />
+                  <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#f87171", fontSize: "0.85rem", fontWeight: 600 }}>%</span>
+                </div>
+                <div style={{ fontSize: "0.73rem", color: "#ef4444", fontWeight: 600 }}>
+                  SL Price: {isIDX ? "Rp " : "$ "}{slPrice > 0 ? fmtIDR(slPrice) : "–"}
+                </div>
+              </div>
+
+              {/* Take Profit % */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#34d399", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  🎯 Take Profit
+                </label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    id="sizer-tp"
+                    type="number"
+                    min="0.5" max="50" step="0.5"
+                    value={sizerTp}
+                    onChange={(e) => setSizerTp(e.target.value)}
+                    style={{
+                      width: "100%", padding: "10px 32px 10px 12px",
+                      background: "rgba(52,211,153,0.06)",
+                      border: "1px solid rgba(52,211,153,0.2)",
+                      borderRadius: "8px", color: "#6ee7b7",
+                      fontSize: "0.9rem", outline: "none", boxSizing: "border-box",
+                    }}
+                  />
+                  <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#34d399", fontSize: "0.85rem", fontWeight: 600 }}>%</span>
+                </div>
+                <div style={{ fontSize: "0.73rem", color: "#10b981", fontWeight: 600 }}>
+                  TP Price: {isIDX ? "Rp " : "$ "}{tpPrice > 0 ? fmtIDR(tpPrice) : "–"}
+                </div>
+              </div>
+            </div>
+
+            {/* Results */}
+            {capital > 0 && slPct > 0 ? (
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                gap: "12px",
+                padding: "20px",
+                background: "rgba(99,102,241,0.06)",
+                border: "1px solid rgba(99,102,241,0.15)",
+                borderRadius: "12px",
+              }}>
+
+                {/* Recommended Lots */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <span style={{ fontSize: "0.7rem", color: "#6366f1", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    {isIDX ? "REKOMENDASI LOT" : "REKOMENDASI SHARES"}
+                  </span>
+                  <span style={{ fontSize: "2rem", fontWeight: 900, color: "#818cf8", lineHeight: 1.1 }}>
+                    {recommendedLots > 0 ? recommendedLots.toLocaleString() : "0"}
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: "#475569" }}>
+                    = {actualShares.toLocaleString()} {language === "id" ? "lembar" : "shares"}
+                  </span>
+                  {/* Warning: modal jadi pembatas */}
+                  {isCapitalLimited && recommendedLots > 0 && (
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", gap: "4px",
+                      fontSize: "0.68rem", fontWeight: 600, color: "#f59e0b",
+                      background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)",
+                      borderRadius: "4px", padding: "2px 6px", width: "fit-content", marginTop: "2px"
+                    }}>
+                      ⚠️ Dibatasi modal
+                    </span>
+                  )}
+                  {isCapitalLimited && (
+                    <span style={{ fontSize: "0.67rem", color: "#64748b", marginTop: "2px" }}>
+                      Risk budget: {lotsFromRisk} lot → dipangkas ke {lotsFromCapital} lot (modal cukup)
+                    </span>
+                  )}
+                </div>
+
+                {/* Risk Amount */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <span style={{ fontSize: "0.7rem", color: "#f87171", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>RISIKO MAKS</span>
+                  <span style={{ fontSize: "1.4rem", fontWeight: 800, color: "#fca5a5", lineHeight: 1.2 }}>
+                    {isIDX ? "Rp " : "$ "}{maxLoss > 0 ? fmtIDR(maxLoss) : fmtIDR(riskAmount)}
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: isCapitalLimited ? "#f59e0b" : "#475569", fontWeight: isCapitalLimited ? 600 : 400 }}>
+                    {effectiveRiskPct > 0 ? effectiveRiskPct.toFixed(2) : riskPct}% dari modal
+                    {isCapitalLimited && riskPct > effectiveRiskPct && (
+                      <span style={{ color: "#64748b", fontWeight: 400, marginLeft: "4px", textDecoration: "line-through", opacity: 0.6 }}>
+                        ({riskPct}%)
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+                {/* Expected Profit */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <span style={{ fontSize: "0.7rem", color: "#34d399", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>POTENSI PROFIT</span>
+                  <span style={{ fontSize: "1.4rem", fontWeight: 800, color: "#6ee7b7", lineHeight: 1.2 }}>
+                    {isIDX ? "Rp " : "$ "}{expectedProfit > 0 ? fmtIDR(expectedProfit) : "0"}
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: "#475569" }}>
+                    +{tpPct}% dari entry
+                  </span>
+                </div>
+
+                {/* Total Investment */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <span style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>TOTAL MODAL DIPAKAI</span>
+                  <span style={{ fontSize: "1.4rem", fontWeight: 800, color: "#e2e8f0", lineHeight: 1.2 }}>
+                    {isIDX ? "Rp " : "$ "}{totalInvestment > 0 ? fmtIDR(totalInvestment) : "0"}
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: "#475569" }}>
+                    {capital > 0 ? ((totalInvestment / capital) * 100).toFixed(1) : 0}% dari modal
+                  </span>
+                </div>
+
+                {/* Risk:Reward */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <span style={{ fontSize: "0.7rem", color: "#fbbf24", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>RISK : REWARD</span>
+                  <span style={{ fontSize: "2rem", fontWeight: 900, color: parseFloat(rrRatio) >= 2 ? "#34d399" : parseFloat(rrRatio) >= 1 ? "#fbbf24" : "#f87171", lineHeight: 1.1 }}>
+                    1 : {rrRatio}
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: parseFloat(rrRatio) >= 2 ? "#10b981" : parseFloat(rrRatio) >= 1 ? "#d97706" : "#dc2626", fontWeight: 600 }}>
+                    {parseFloat(rrRatio) >= 2 ? "✅ Ideal" : parseFloat(rrRatio) >= 1 ? "🟡 Acceptable" : "🔴 Kurang ideal"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                padding: "20px",
+                textAlign: "center",
+                background: "rgba(255,255,255,0.02)",
+                border: "1px dashed rgba(255,255,255,0.07)",
+                borderRadius: "12px",
+                color: "#475569",
+                fontSize: "0.85rem",
+              }}>
+                💡 {language === "id"
+                  ? "Masukkan modal dan persentase risiko untuk melihat hasil kalkulasi"
+                  : "Enter your capital and risk percentage to see the calculation results"}
+              </div>
+            )}
+
+            {/* Formula note */}
+            <div style={{ fontSize: "0.72rem", color: "#334155", paddingTop: "4px", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+              <strong style={{ color: "#475569" }}>Formula:</strong>{" "}
+              Risiko (Rp) = Modal × Risk% &nbsp;|&nbsp;
+              Max Lembar = Risiko ÷ (Harga × SL%) &nbsp;|&nbsp;
+              Lot = ⌊Max Lembar ÷ {LOT_SIZE}⌋ &nbsp;|&nbsp;
+              R:R = (TP% ÷ SL%)
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Buy Modal */}
       {buyModalOpen && (
