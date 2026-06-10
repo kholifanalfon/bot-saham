@@ -386,6 +386,7 @@ async function syncStocks() {
   const modelName = (await getSetting("gemini_model")) || "gemini-1.5-flash";
   const geminiIdxIndices =
     (await getSetting("gemini_idx_indices")) || "LQ45, IDX30, SMC Liquid";
+  const defaultStrategy = (await getSetting("default_strategy")) || "Day Trade";
 
   if (!geminiApiKey) {
     console.warn(
@@ -395,15 +396,24 @@ async function syncStocks() {
   } else {
     try {
       console.log(
-        "[AI Stock Sync] Contacting Gemini AI to query latest target indices and US high-liquidity stock indices...",
+        `[AI Stock Sync] Contacting Gemini AI to query latest target indices for strategy: ${defaultStrategy}...`
       );
       const genAI = new GoogleGenerativeAI(geminiApiKey);
       const model = genAI.getGenerativeModel({
         model: modelName,
       });
 
+      const candidateCategory = 
+        defaultStrategy === "Scalp Trade"
+          ? "scalp_candidate"
+          : defaultStrategy === "Day Trade"
+          ? "day_candidate"
+          : defaultStrategy === "Position Trade"
+          ? "position_candidate"
+          : "swing_candidate";
+
       const prompt = `
-You are an elite swing trading strategist and quantitative analyst. Generate a curated stock registry for a swing trading screener system.
+You are an elite ${defaultStrategy} strategist and quantitative analyst. Generate a curated stock registry for a ${defaultStrategy} screener system.
 
 Your output must contain THREE categories of stocks:
 
@@ -416,11 +426,11 @@ Select exactly 45 stocks from the ${geminiIdxIndices} indices on the Indonesia S
 - Ticker MUST end with '.JK' (e.g., 'BBCA.JK'). Market = "IDX".
 
 ## CATEGORY 2: US High-Liquidity (20 stocks)
-Select exactly 20 S&P 500 / Nasdaq 100 stocks with consistently high volume and volatility suitable for swing trading.
+Select exactly 20 S&P 500 / Nasdaq 100 stocks with consistently high volume and volatility suitable for ${defaultStrategy}.
 - Ticker in standard US format (e.g., 'AAPL'). Market = "US".
 
-## CATEGORY 3: Today's Swing Trading Profit Candidates (20 stocks)
-Select exactly 20 ADDITIONAL stocks (target: 15 IDX + 5 US) that show HIGH PROBABILITY swing trading setups RIGHT NOW.
+## CATEGORY 3: Today's ${defaultStrategy} Candidates (20 stocks)
+Select exactly 20 ADDITIONAL stocks (target: 15 IDX + 5 US) that show HIGH PROBABILITY ${defaultStrategy} setups RIGHT NOW.
 
 **CRITICAL EXCLUSION RULE — STRICTLY ENFORCED:**
 The stocks in Category 3 MUST be completely different symbols from those already selected in Category 1 and Category 2.
@@ -430,13 +440,26 @@ If you already picked AAPL or NVDA in Category 2, those symbols CANNOT appear in
 Choose from DIFFERENT companies — smaller caps, sector plays, or strong mid-caps not in the main blue-chip list.
 
 Selection criteria for Category 3 (one or more must apply):
-- Recently broke out above a key resistance or moving average (EMA 21/50).
+${
+  defaultStrategy === "Scalp Trade"
+    ? `- Strong order book imbalances and dynamic price action.
+- High intraday volume spikes and tight spreads.
+- Price moving strongly with support from short-term EMAs (e.g., EMA 9).`
+    : defaultStrategy === "Day Trade"
+    ? `- Intraday trend continuation setups with MACD momentum.
+- Strong volume above average and holding VWAP.
+- Moving averages EMA 9 & 21 positive crossover.`
+    : defaultStrategy === "Position Trade"
+    ? `- Long-term uptrend holding above EMA 200.
+- Healthy financial audit stats (attractive EPS growth, low PER, low PBV).
+- Undervalued gems with stable institutional backing.`
+    : /* Swing Trade */ `- Recently broke out above a key resistance or moving average (EMA 21/50).
 - Showing bullish MACD crossover with rising volume.
 - In a healthy pullback/retracement to EMA support after an established uptrend (ideal swing re-entry).
-- Coming out of an oversold RSI zone (30-45) while price is still above EMA50.
-- Strong sector momentum or positive catalyst (earnings beat, index inclusion, policy tailwind, govt project win).
+- Coming out of an oversold RSI zone (30-45) while price is still above EMA50.`
+}
 
-Mark these with "category": "swing_candidate" in the JSON. All other stocks use "category": "core".
+Mark these with "category": "${candidateCategory}" in the JSON. All other stocks use "category": "core".
 
 ---
 
@@ -445,7 +468,7 @@ RULES (apply to ALL stocks):
 - IDX tickers MUST end in '.JK'. US tickers use standard format.
 - Ensure company names accurately match ticker symbols.
 - NO duplicate symbols anywhere in the entire output — each symbol must be unique across all 3 categories.
-- Total output: exactly 85 stocks (45 IDX core + 20 US core + 20 swing candidates).
+- Total output: exactly 85 stocks (45 IDX core + 20 US core + 20 candidates).
 
 OUTPUT FORMAT: Return ONLY a clean JSON array. No markdown code blocks, no explanation text.
 Each object must have exactly these fields:
@@ -466,7 +489,7 @@ Each object must have exactly these fields:
     "symbol": "ISAT.JK",
     "name": "Indosat Ooredoo Hutchison Tbk",
     "market": "IDX",
-    "category": "swing_candidate"
+    "category": "${candidateCategory}"
   }
 ]
       `;
@@ -489,10 +512,10 @@ Each object must have exactly these fields:
       }
 
       const idxStocks = parsed.filter(
-        (s) => s.market === "IDX" && s.category !== "swing_candidate",
+        (s) => s.market === "IDX" && s.category !== candidateCategory,
       );
       const usStocks = parsed
-        .filter((s) => s.market === "US" && s.category !== "swing_candidate")
+        .filter((s) => s.market === "US" && s.category !== candidateCategory)
         .slice(0, 20);
 
       // Build a set of all core symbols for deduplication
@@ -501,15 +524,15 @@ Each object must have exactly these fields:
         ...usStocks.map((s: any) => s.symbol),
       ]);
 
-      const swingCandidatesRaw = parsed
-        .filter((s) => s.category === "swing_candidate")
+      const candidatesRaw = parsed
+        .filter((s) => s.category === candidateCategory)
         .slice(0, 20);
 
-      // Safety net: remove any swing_candidate that duplicates a core symbol
-      const swingCandidates = swingCandidatesRaw.filter((s: any) => {
+      // Safety net: remove any candidate that duplicates a core symbol
+      const candidates = candidatesRaw.filter((s: any) => {
         if (coreSymbols.has(s.symbol)) {
           console.warn(
-            `[AI Stock Sync] ⚠️  Duplicate detected and removed from swing_candidates: ${s.symbol} (already in core list)`,
+            `[AI Stock Sync] ⚠️  Duplicate detected and removed from candidates: ${s.symbol} (already in core list)`,
           );
           return false;
         }
@@ -521,21 +544,21 @@ Each object must have exactly these fields:
         ...s,
         category: "core",
       }));
-      const normalizedSwing = swingCandidates.map((s) => ({
+      const normalizedCandidates = candidates.map((s) => ({
         ...s,
-        category: "swing_candidate",
+        category: candidateCategory,
       }));
-      fetchedStocks = [...normalizedCore, ...normalizedSwing];
+      fetchedStocks = [...normalizedCore, ...normalizedCandidates];
 
       console.log(
-        `[AI Stock Sync] Successfully loaded ${fetchedStocks.length} symbols from Gemini AI:`,
+        `[AI Stock Sync] Successfully loaded ${fetchedStocks.length} symbols from Gemini AI for ${defaultStrategy}:`,
       );
       console.log(`  ↳ ${idxStocks.length} IDX core stocks`);
       console.log(`  ↳ ${usStocks.length} US core stocks`);
       console.log(
-        `  ↳ ${normalizedSwing.length} swing trading candidates (today's profit setups):`,
+        `  ↳ ${normalizedCandidates.length} trading candidates:`,
       );
-      normalizedSwing.forEach((s) =>
+      normalizedCandidates.forEach((s) =>
         console.log(`     🎯 ${s.symbol} — ${s.name} (${s.market})`),
       );
     } catch (err: any) {
@@ -583,9 +606,7 @@ Each object must have exactly these fields:
       const model = genAI.getGenerativeModel({ model: modelName });
 
       // Build a set of all symbols we already know about (to limit scope)
-      const knownSymbols = [
-        ...fetchedStocks.map((s) => s.symbol),
-      ];
+      const knownSymbols = [...fetchedStocks.map((s) => s.symbol)];
 
       const sidewaysPrompt = `
 You are an elite swing trading analyst. Identify stocks that are CURRENTLY in a sideways/ranging/consolidation phase and are VERY POOR choices for swing traders RIGHT NOW.
@@ -668,7 +689,13 @@ Example output: ["WIKA.JK", "BUKA.JK", "GOTO.JK"]
            market = EXCLUDED.market,
            is_active = $5,
            category = EXCLUDED.category`,
-        [stock.symbol, stock.name, stock.market, stock.category || "core", isActive],
+        [
+          stock.symbol,
+          stock.name,
+          stock.market,
+          stock.category || "core",
+          isActive,
+        ],
       );
 
       if (existing.rowCount && existing.rowCount > 0) {
@@ -680,7 +707,9 @@ Example output: ["WIKA.JK", "BUKA.JK", "GOTO.JK"]
 
     // Deactivate sideways stocks that exist in DB but are NOT in the current fetchedStocks list
     // (stocks already in fetchedStocks were handled above with isActive=false via upsert)
-    const fetchedSymbolSet = new Set(fetchedStocks.map((s) => s.symbol.toUpperCase()));
+    const fetchedSymbolSet = new Set(
+      fetchedStocks.map((s) => s.symbol.toUpperCase()),
+    );
     let deactivated = 0;
 
     for (const sym of sidewaysSymbols) {
@@ -692,14 +721,15 @@ Example output: ["WIKA.JK", "BUKA.JK", "GOTO.JK"]
         );
         if (res.rowCount && res.rowCount > 0) {
           deactivated++;
-          console.log(`  🔴 Deactivated: ${sym} (sideways, not in active list)`);
+          console.log(
+            `  🔴 Deactivated: ${sym} (sideways, not in active list)`,
+          );
         }
       }
     }
     // Note: reactivation of previously-sideways stocks is handled automatically by the
     // main upsert loop above — if a stock reappears in fetchedStocks and is NOT in sidewaysSet,
     // it gets is_active = true via ON CONFLICT DO UPDATE.
-
 
     const activeCountRes = await query(
       "SELECT COUNT(*) FROM stocks WHERE is_active = true",
@@ -713,7 +743,6 @@ Example output: ["WIKA.JK", "BUKA.JK", "GOTO.JK"]
     console.log(`  ↳ Deactivated (sideways): ${deactivated} stocks`);
     console.log(`  ↳ Total active stocks: ${activeCountRes.rows[0].count}`);
     console.log(`  ↳ Swing trading candidates: ${swingCountRes.rows[0].count}`);
-
   } catch (dbErr) {
     console.error(
       "[AI Stock Sync] Database error during stock synchronization:",

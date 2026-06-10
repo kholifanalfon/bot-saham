@@ -366,7 +366,7 @@ export const AppLayout: React.FC = () => {
             <span>{t("portfolio")}</span>
           </NavLink>
 
-          <NavLink to="/ai" style={() => bottomTabStyle("/ai")}>
+          <NavLink to="/swing-recap" style={() => bottomTabStyle("/swing-recap")}>
             <svg
               width="20"
               height="20"
@@ -377,9 +377,11 @@ export const AppLayout: React.FC = () => {
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <polygon points="12 2 2 22 22 22"></polygon>
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
             </svg>
-            <span>AI Bot</span>
+            <span>My Recap</span>
           </NavLink>
 
           <button

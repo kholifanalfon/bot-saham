@@ -118,13 +118,17 @@ export async function getPortfolioHoldings(userId: string): Promise<{ holdings: 
     const pnl = (currentPrice - avgPrice) * totalShares;
     const pnlPercent = avgPrice > 0 ? ((currentPrice - avgPrice) / avgPrice) * 100 : 0;
 
+    const portRes = await query('SELECT gemini_analysis FROM portfolio WHERE user_id = $1 AND symbol = $2', [userId, sym]);
+    const geminiAnalysis = portRes.rowCount && portRes.rows[0].gemini_analysis ? JSON.parse(portRes.rows[0].gemini_analysis) : null;
+
     holdings.push({
       symbol: sym,
       shares: totalShares,
       avgPrice,
       currentPrice,
       pnl,
-      pnlPercent
+      pnlPercent,
+      geminiAnalysis
     });
 
     totalValue += totalShares * currentPrice;

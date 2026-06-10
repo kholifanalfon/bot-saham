@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/authMiddleware.js';
-import { getHistoricalData } from '../services/yahoo-finance.js';
+import { getHistoricalData, getFundamentals } from '../services/yahoo-finance.js';
 import { performFullAnalysis as analyze } from '../services/technical-analysis.js';
 import { query } from '../services/db.js';
 import { checkAndTriggerIngestion, runHistoricalIngestion, runIngestionPipeline } from '../services/ingestion.js';
@@ -144,6 +144,19 @@ router.get('/', async (req, res) => {
     const usEnabled = settingsRes.rows[0]?.value === 'true';
     const marketFilter = usEnabled ? "" : " AND s.market = 'IDX'";
 
+    const strategyParam = req.query.strategy as string;
+    const defaultStrategyRes = await query("SELECT value FROM settings WHERE key = 'default_strategy'");
+    const defaultStrategy = strategyParam || defaultStrategyRes.rows[0]?.value || 'Day Trade';
+
+    let scoreColumn = 'swing_score';
+    if (defaultStrategy === 'Scalp Trade') {
+      scoreColumn = 'scalp_score';
+    } else if (defaultStrategy === 'Day Trade') {
+      scoreColumn = 'day_score';
+    } else if (defaultStrategy === 'Position Trade') {
+      scoreColumn = 'position_score';
+    }
+
     // Only proactively trigger the lazy ingestion check if no specific date filter is applied (default latest flow)
     if (!targetDate && !startDate && !endDate) {
       checkAndTriggerIngestion().catch(err => {
@@ -154,7 +167,7 @@ router.get('/', async (req, res) => {
     let queryStr = `
       SELECT 
         d.symbol,
-        d.swing_score AS score,
+        d.${scoreColumn} AS score,
         d.rsi,
         d.macd_histogram AS "macdHistogram",
         d.ema9,
@@ -166,7 +179,7 @@ router.get('/', async (req, res) => {
       FROM stock_data d
       JOIN stocks s ON d.symbol = s.symbol
       WHERE d.is_active = true AND s.is_active = true${marketFilter}
-      ORDER BY d.swing_score DESC
+      ORDER BY d.${scoreColumn} DESC
     `;
     let queryParams: any[] = [];
 
@@ -174,7 +187,7 @@ router.get('/', async (req, res) => {
       queryStr = `
         SELECT 
           d.symbol,
-          d.swing_score AS score,
+          d.${scoreColumn} AS score,
           d.rsi,
           d.macd_histogram AS "macdHistogram",
           d.ema9,
@@ -186,14 +199,14 @@ router.get('/', async (req, res) => {
         FROM stock_data d
         JOIN stocks s ON d.symbol = s.symbol
         WHERE DATE(d.date) >= $1 AND DATE(d.date) <= $2 AND s.is_active = true${marketFilter}
-        ORDER BY d.date DESC, d.swing_score DESC
+        ORDER BY d.date DESC, d.${scoreColumn} DESC
       `;
       queryParams = [startDate, endDate];
     } else if (targetDate) {
       queryStr = `
         SELECT 
           d.symbol,
-          d.swing_score AS score,
+          d.${scoreColumn} AS score,
           d.rsi,
           d.macd_histogram AS "macdHistogram",
           d.ema9,
@@ -205,7 +218,7 @@ router.get('/', async (req, res) => {
         FROM stock_data d
         JOIN stocks s ON d.symbol = s.symbol
         WHERE DATE(d.date) = $1 AND s.is_active = true${marketFilter}
-        ORDER BY d.swing_score DESC
+        ORDER BY d.${scoreColumn} DESC
       `;
       queryParams = [targetDate];
     }
@@ -253,12 +266,16 @@ router.post('/', async (req, res) => {
     const lows = history.map((h) => h.low);
     const closes = history.map((h) => h.close);
     const volume = history.map((h) => h.volume);
+    const opens = history.map((h) => h.open);
 
-    const result = analyze(highs, lows, closes, volume);
+    const fundamentals = await getFundamentals(symbol);
+
+    const result = analyze(highs, lows, closes, volume, true, fundamentals, opens);
     return res.status(200).json({
       symbol,
       ...result,
-      lastClose: closes[closes.length - 1]
+      lastClose: closes[closes.length - 1],
+      fundamentals
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Error running technical analysis' });

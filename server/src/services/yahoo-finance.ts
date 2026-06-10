@@ -10,37 +10,111 @@ function formatToDateTimeString(date: Date): string {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+const fundamentalsCache = new Map<string, { data: { eps: number | null; per: number | null; pbv: number | null }; timestamp: number }>();
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+export async function getFundamentals(symbol: string): Promise<{
+  eps: number | null;
+  per: number | null;
+  pbv: number | null;
+}> {
+  const now = Date.now();
+  const cached = fundamentalsCache.get(symbol);
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const result = { eps: null as number | null, per: null as number | null, pbv: null as number | null };
+  try {
+    const response = await fetch(
+      `https://query1.finance.yahoo.com/v11/finance/quoteSummary/${symbol}?modules=defaultKeyStatistics,summaryDetail`
+    );
+    if (!response.ok) {
+      console.warn(`[Yahoo Finance] Fundamentals API warning for ${symbol}: ${response.statusText}`);
+      return result;
+    }
+    const data = (await response.json()) as any;
+    const summary = data?.quoteSummary?.result?.[0];
+    if (summary) {
+      const stats = summary.defaultKeyStatistics || {};
+      const detail = summary.summaryDetail || {};
+
+      result.eps = stats.trailingEps?.raw ?? stats.forwardEps?.raw ?? null;
+      result.pbv = stats.priceToBook?.raw ?? detail.priceToBook?.raw ?? null;
+      result.per = detail.trailingPE?.raw ?? detail.forwardPE?.raw ?? null;
+    }
+  } catch (error) {
+    console.warn(`[Yahoo Finance] Failed to fetch fundamentals for ${symbol}:`, error);
+  }
+
+  // Cache even if it's null/failed to prevent hammering Yahoo in case of rate limits
+  fundamentalsCache.set(symbol, { data: result, timestamp: now });
+  return result;
+}
+
 export async function getHistoricalData(
   symbol: string,
   period: string = "1mo",
+  intervalParam?: string,
 ): Promise<any[]> {
   try {
     let range = "1mo";
-    switch (period) {
-      case "1d":
-        range = "1d";
-        break;
-      case "5d":
-        range = "5d";
-        break;
-      case "1mo":
-        range = "1mo";
-        break;
-      case "3mo":
-        range = "3mo";
-        break;
-      case "6mo":
-        range = "6mo";
-        break;
-      case "1y":
-        range = "1y";
-        break;
-      default:
-        range = "1mo";
+    let interval = "1d";
+
+    if (intervalParam) {
+      range = period;
+      interval = intervalParam;
+    } else {
+      switch (period) {
+        case "1m":
+          range = "1d";
+          interval = "1m";
+          break;
+        case "30m":
+          range = "5d";
+          interval = "30m";
+          break;
+        case "90m":
+          range = "1mo";
+          interval = "90m";
+          break;
+        case "1d":
+          range = "3mo";
+          interval = "1d";
+          break;
+        case "1wk":
+          range = "1y";
+          interval = "1wk";
+          break;
+        case "1mo":
+          range = "5y";
+          interval = "1mo";
+          break;
+        case "1y":
+          range = "5y";
+          interval = "1mo";
+          break;
+        // Legacy Support
+        case "5d":
+          range = "5d";
+          interval = "1d";
+          break;
+        case "3mo":
+          range = "3mo";
+          interval = "1d";
+          break;
+        case "6mo":
+          range = "6mo";
+          interval = "1d";
+          break;
+        default:
+          range = "1mo";
+          interval = "1d";
+      }
     }
 
     const response = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=1d`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`,
     );
     if (!response.ok) {
       throw new Error(`Yahoo Finance Chart API error: ${response.statusText}`);
@@ -83,30 +157,32 @@ export async function getHistoricalData(
       throw new Error("No valid candlesticks found after parsing");
     }
 
-    // Fetch live quote to merge regular market price and change percentage into the latest candle
-    try {
-      const quote = await getYahooQuote(symbol);
-      if (formattedData.length > 0) {
-        const lastIndex = formattedData.length - 1;
-        formattedData[lastIndex].close =
-          quote.c || formattedData[lastIndex].close;
-        formattedData[lastIndex].open =
-          quote.o || formattedData[lastIndex].open;
-        formattedData[lastIndex].high = Math.max(
-          formattedData[lastIndex].high,
-          quote.h,
+    // Fetch live quote to merge regular market price and change percentage into the latest candle (only for daily timeframe or longer)
+    if (interval === "1d" || interval === "1wk" || interval === "1mo") {
+      try {
+        const quote = await getYahooQuote(symbol);
+        if (formattedData.length > 0) {
+          const lastIndex = formattedData.length - 1;
+          formattedData[lastIndex].close =
+            quote.c || formattedData[lastIndex].close;
+          formattedData[lastIndex].open =
+            quote.o || formattedData[lastIndex].open;
+          formattedData[lastIndex].high = Math.max(
+            formattedData[lastIndex].high,
+            quote.h,
+          );
+          formattedData[lastIndex].low = Math.min(
+            formattedData[lastIndex].low,
+            quote.l,
+          );
+          formattedData[lastIndex].changePercent = quote.dp;
+        }
+      } catch (quoteErr) {
+        console.warn(
+          `Failed to merge live quote into historical data for ${symbol}:`,
+          quoteErr,
         );
-        formattedData[lastIndex].low = Math.min(
-          formattedData[lastIndex].low,
-          quote.l,
-        );
-        formattedData[lastIndex].changePercent = quote.dp;
       }
-    } catch (quoteErr) {
-      console.warn(
-        `Failed to merge live quote into historical data for ${symbol}:`,
-        quoteErr,
-      );
     }
 
     return formattedData;

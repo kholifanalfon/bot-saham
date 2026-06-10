@@ -57,6 +57,30 @@ export const Screener: React.FC = () => {
   const [screenerStocks, setScreenerStocks] = useState<StockAnalysis[]>([]);
   const navigate = useNavigate();
 
+  const [defaultStrategy, setDefaultStrategy] = useState("Day Trade");
+  const [selectedStrategy, setSelectedStrategy] = useState("Day Trade");
+
+  // Fetch settings to resolve default strategy
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch("http://localhost:3001/api/settings", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.default_strategy) {
+            setDefaultStrategy(data.default_strategy);
+            setSelectedStrategy(data.default_strategy);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch settings:", error);
+      }
+    };
+    fetchSettings();
+  }, []);
+
   // Responsive mobile view check
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -141,13 +165,13 @@ export const Screener: React.FC = () => {
   };
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadRealScreenerData = async () => {
+  const loadRealScreenerData = async (strat: string = selectedStrategy) => {
     setLoading(true);
     setError(null);
     try {
-      let url = "http://localhost:3001/api/analysis";
+      let url = `http://localhost:3001/api/analysis?strategy=${encodeURIComponent(strat)}`;
       if (date) {
-        url = `http://localhost:3001/api/analysis?date=${date}`;
+        url = `http://localhost:3001/api/analysis?date=${date}&strategy=${encodeURIComponent(strat)}`;
       }
       // Fetch the pre-calculated daily bursa snapshot from PostgreSQL in a single request
       const response = await fetch(url, {
@@ -185,8 +209,8 @@ export const Screener: React.FC = () => {
 
   // Fetch real-time bursa data & scores from backend (Yahoo Finance / Finnhub)
   useEffect(() => {
-    loadRealScreenerData();
-  }, [date]);
+    loadRealScreenerData(selectedStrategy);
+  }, [date, selectedStrategy]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -209,7 +233,7 @@ export const Screener: React.FC = () => {
           ? "Berhasil memperbarui data terbaru!"
           : "Successfully refreshed latest data!",
       );
-      await loadRealScreenerData();
+      await loadRealScreenerData(selectedStrategy);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -324,6 +348,36 @@ export const Screener: React.FC = () => {
                     : m === "idx"
                       ? t("idx_tab")
                       : t("us_tab")}
+              </button>
+            ))}
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: "4px",
+              backgroundColor: "rgba(0,0,0,0.2)",
+              padding: "4px",
+              borderRadius: "8px",
+            }}
+          >
+            {(["Scalp Trade", "Day Trade", "Swing Trade", "Position Trade"] as const).map((strat) => (
+              <button
+                key={strat}
+                onClick={() => setSelectedStrategy(strat)}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: "0.82rem",
+                  borderRadius: "6px",
+                  border: "none",
+                  cursor: "pointer",
+                  backgroundColor: selectedStrategy === strat ? "#3b82f6" : "transparent",
+                  color: selectedStrategy === strat ? "white" : "#94a3b8",
+                  fontWeight: 600,
+                  transition: "all 0.2s ease",
+                }}
+              >
+                {strat.split(" ")[0]}
               </button>
             ))}
           </div>

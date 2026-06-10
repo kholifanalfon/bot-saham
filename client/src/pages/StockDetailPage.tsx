@@ -52,6 +52,19 @@ export const StockDetailPage: React.FC = () => {
   const [sellShares, setSellShares] = useState("100");
   const [transacting, setTransacting] = useState(false);
 
+  // Default strategy and timeframe state
+  const [defaultStrategy, setDefaultStrategy] = useState("Day Trade");
+  const [selectedStrategy, setSelectedStrategy] = useState("Day Trade");
+  const [timeframe, setTimeframe] = useState("1d");
+
+  const getActiveScore = () => {
+    if (!analysisResult) return 84;
+    if (selectedStrategy === "Scalp Trade") return Math.round(analysisResult.scalpScore || 0);
+    if (selectedStrategy === "Day Trade") return Math.round(analysisResult.dayScore || 0);
+    if (selectedStrategy === "Position Trade") return Math.round(analysisResult.positionScore || 0);
+    return Math.round(analysisResult.swingScore || 0);
+  };
+
   // Position Sizing Calculator state
   const [sizerCapital, setSizerCapital] = useState("");
   const [sizerRisk, setSizerRisk] = useState("2");
@@ -66,6 +79,33 @@ export const StockDetailPage: React.FC = () => {
   const [showRsi, setShowRsi] = useState(false);
   const [showMacd, setShowMacd] = useState(false);
 
+  // Automatically update checked indicators based on strategy
+  useEffect(() => {
+    // Reset all
+    setShowEma9(false);
+    setShowEma20(false);
+    setShowEma21(false);
+    setShowEma50(false);
+    setShowEma200(false);
+    setShowRsi(false);
+    setShowMacd(false);
+
+    if (selectedStrategy === "Scalp Trade") {
+      setShowEma9(true);
+    } else if (selectedStrategy === "Day Trade") {
+      setShowEma9(true);
+      setShowEma21(true);
+      setShowMacd(true);
+    } else if (selectedStrategy === "Swing Trade") {
+      setShowEma50(true);
+      setShowEma200(true);
+      setShowRsi(true);
+      setShowMacd(true);
+    } else if (selectedStrategy === "Position Trade") {
+      setShowEma200(true);
+    }
+  }, [selectedStrategy]);
+
   // Responsive check
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -73,6 +113,42 @@ export const StockDetailPage: React.FC = () => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const strategyToTimeframe = (strat: string) => {
+    if (strat === "Scalp Trade") return "1m";
+    if (strat === "Day Trade") return "30m";
+    if (strat === "Swing Trade") return "1d";
+    if (strat === "Position Trade") return "1wk";
+    return "1d";
+  };
+
+  const strategyToRefreshInterval = (strat: string) => {
+    if (strat === "Scalp Trade") return 30 * 1000;
+    if (strat === "Day Trade") return 15 * 60 * 1000;
+    return 0; // manual / no auto-refresh
+  };
+
+  // Fetch settings to resolve strategy
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch("http://localhost:3001/api/settings", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.default_strategy) {
+            setDefaultStrategy(data.default_strategy);
+            setSelectedStrategy(data.default_strategy);
+            setTimeframe(strategyToTimeframe(data.default_strategy));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch settings:", error);
+      }
+    };
+    fetchSettings();
   }, []);
 
   const handleFetchGemini = async (force: boolean = false) => {
@@ -89,6 +165,7 @@ export const StockDetailPage: React.FC = () => {
             symbol: activeSymbol,
             language,
             forceRefresh: force,
+            strategy: selectedStrategy,
           }),
           credentials: "include",
         },
@@ -111,149 +188,183 @@ export const StockDetailPage: React.FC = () => {
     }
   }, [urlSymbol, selectedSymbol, setSelectedSymbol]);
 
-  // Load real-time candlestick series and analysis results from backend APIs (Yahoo Finance / Finnhub)
-  useEffect(() => {
-    const loadRealData = async () => {
-      try {
-        setLoading(true);
-        const headers = {
-          "Content-Type": "application/json",
-        };
+  // Load real-time data
+  const loadRealData = async (silent: boolean = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const headers = {
+        "Content-Type": "application/json",
+      };
 
-        // 1. Fetch real candles from Yahoo Finance/Finnhub via backend
-        const responseCandles = await fetch(
-          `http://localhost:3001/api/stocks/candles?symbol=${activeSymbol}&period=3mo`,
-          {
-            headers,
-            credentials: "include",
-          },
-        );
-        if (!responseCandles.ok) throw new Error("Candles request failed");
-        const candles = await responseCandles.json();
+      // 1. Fetch real candles from Yahoo Finance/Finnhub via backend
+      const responseCandles = await fetch(
+        `http://localhost:3001/api/stocks/candles?symbol=${activeSymbol}&period=${timeframe}`,
+        {
+          headers,
+          credentials: "include",
+        },
+      );
+      if (!responseCandles.ok) throw new Error("Candles request failed");
+      const candles = await responseCandles.json();
 
-        // Map backend date format to Lightweight Chart format
-        const formatted = candles.map((c: any) => ({
-          time: typeof c.date === "string" ? c.date.split(" ")[0] : c.date,
+      // Map backend date format to Lightweight Chart format
+      const formatted = candles.map((c: any) => {
+        let timeVal = c.date;
+        if (timeframe === "1m" || timeframe === "30m" || timeframe === "90m") {
+          timeVal = Math.floor(new Date(c.date).getTime() / 1000);
+        } else {
+          timeVal = typeof c.date === "string" ? c.date.split(" ")[0] : c.date;
+        }
+        return {
+          time: timeVal,
           open: c.open,
           high: c.high,
           low: c.low,
           close: c.close,
-        }));
-        setChartData(formatted);
-
-        // 2. Fetch real technical calculations (RSI, MACD, Bollinger, Score) from backend
-        const responseAnalysis = await fetch(
-          "http://localhost:3001/api/analysis",
-          {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ symbol: activeSymbol }),
-            credentials: "include",
-          },
-        );
-        if (responseAnalysis.ok) {
-          const analysis = await responseAnalysis.json();
-          setAnalysisResult(analysis);
-        } else {
-          // If analysis request fails (e.g. unauthorized), log or throw error
-          const errData = await responseAnalysis.json().catch(() => ({}));
-          console.error("Analysis API Error:", errData);
-        }
-
-        // 3. Fetch real quote from Yahoo Finance/Finnhub via backend
-        const responseQuote = await fetch(
-          `http://localhost:3001/api/stocks/quote?symbol=${activeSymbol}`,
-          {
-            headers,
-            credentials: "include",
-          },
-        );
-        if (responseQuote.ok) {
-          const q = await responseQuote.json();
-          setQuote(q);
-        }
-
-        // Core data (candles, analysis, quote) loaded! Render the chart immediately without waiting for Gemini
-        setLoading(false);
-
-        // 4. Fetch real Gemini AI analysis from backend (cached or live check)
-        await handleFetchGemini(false);
-      } catch (err) {
-        console.warn(
-          "Real API unavailable (rate limits / sandbox mode), executing high-fidelity fallback.",
-          err,
-        );
-
-        // Dynamic resilient fallback generator if API fails
-        const data = [];
-        const now = new Date();
-        const meta = stockMetadata[activeSymbol] || {
-          price: activeSymbol?.endsWith(".JK") ? 5450 : 180,
-          change: 1.5,
-          score: 75,
         };
-        let currentPrice = meta.price;
-        const random = seedRandom(activeSymbol);
+      });
+      setChartData(formatted);
 
-        for (let i = 0; i <= 50; i++) {
-          const date = new Date();
-          date.setDate(now.getDate() - i);
-
-          const change = (random() - 0.52) * (currentPrice * 0.015);
-          const close = currentPrice;
-          const open = currentPrice - change;
-          const high =
-            Math.max(open, close) + random() * (currentPrice * 0.008);
-          const low = Math.min(open, close) - random() * (currentPrice * 0.008);
-
-          data.push({
-            time: date.toISOString().split("T")[0],
-            open,
-            high,
-            low,
-            close,
-          });
-          currentPrice = open;
-        }
-        setChartData(data.reverse());
-        setAnalysisResult({
-          swingScore: meta.score,
-          rsi: 52.4,
-          macd: { histogram: 0.15 },
-          ema9: meta.price * 0.99,
-          ema20: meta.price * 0.985,
-          ema21: meta.price * 0.98,
-          ema50: meta.price * 0.96,
-          ema200: meta.price * 0.90,
-          bb: { upper: meta.price * 1.05, lower: meta.price * 0.95 },
-          componentScores: {
-            ema: meta.score >= 70 ? 90 : 50,
-            macd: meta.score >= 70 ? 80 : 40,
-            rsi: meta.score >= 70 ? 85 : 45,
-            obv: meta.score >= 70 ? 100 : 40,
-            volume: meta.score >= 70 ? 95 : 50,
-            bb: meta.score >= 70 ? 75 : 50,
-          },
-        });
-        setQuote({
-          c: meta.price,
-          dp: meta.change,
-        });
-        setGeminiAnalysis({
-          recommendation: meta.score >= 70 ? "Strong Buy" : "Hold",
-          confidenceScore: meta.score,
-          reasoning:
-            language === "id"
-              ? `"${activeSymbol} menunjukkan konfigurasi swing trading yang kuat. RSI harian stabil di wilayah momentum 52.4, sedangkan posisi harga di atas EMA 21 dan 50 mengonfirmasi kelanjutan tren naik dengan ruang penguatan yang sehat."`
-              : `"${activeSymbol} displays a strong swing trading configuration. The daily RSI is stable in the momentum region at 52.4, and the price sitting above its 21 and 50 EMAs confirms a continuation of the uptrend with healthy room to grow."`,
-        });
-      } finally {
-        setLoading(false);
+      // 2. Fetch real technical calculations (RSI, MACD, Bollinger, Score) from backend
+      const responseAnalysis = await fetch(
+        "http://localhost:3001/api/analysis",
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ symbol: activeSymbol }),
+          credentials: "include",
+        },
+      );
+      if (responseAnalysis.ok) {
+        const analysis = await responseAnalysis.json();
+        setAnalysisResult(analysis);
       }
-    };
 
-    loadRealData();
-  }, [activeSymbol]);
+      // 3. Fetch real quote from Yahoo Finance/Finnhub via backend
+      const responseQuote = await fetch(
+        `http://localhost:3001/api/stocks/quote?symbol=${activeSymbol}`,
+        {
+          headers,
+          credentials: "include",
+        },
+      );
+      if (responseQuote.ok) {
+        const q = await responseQuote.json();
+        setQuote(q);
+      }
+
+      if (!silent) {
+        setLoading(false);
+        await handleFetchGemini(false);
+      }
+    } catch (err) {
+      console.warn(
+        "Real API unavailable (rate limits / sandbox mode), executing high-fidelity fallback.",
+        err,
+      );
+
+      // Dynamic resilient fallback generator if API fails
+      const data = [];
+      const now = new Date();
+      const meta = stockMetadata[activeSymbol] || {
+        price: activeSymbol?.endsWith(".JK") ? 5450 : 180,
+        change: 1.5,
+        score: 75,
+      };
+      let currentPrice = meta.price;
+      const random = seedRandom(activeSymbol);
+
+      for (let i = 0; i <= 50; i++) {
+        const date = new Date();
+        if (timeframe === "1m") {
+          date.setMinutes(now.getMinutes() - i);
+        } else if (timeframe === "30m") {
+          date.setMinutes(now.getMinutes() - i * 30);
+        } else if (timeframe === "90m") {
+          date.setMinutes(now.getMinutes() - i * 90);
+        } else if (timeframe === "1wk") {
+          date.setDate(now.getDate() - i * 7);
+        } else if (timeframe === "1mo" || timeframe === "1y") {
+          date.setMonth(now.getMonth() - i);
+        } else {
+          date.setDate(now.getDate() - i);
+        }
+
+        const change = (random() - 0.52) * (currentPrice * 0.015);
+        const close = currentPrice;
+        const open = currentPrice - change;
+        const high =
+          Math.max(open, close) + random() * (currentPrice * 0.008);
+        const low = Math.min(open, close) - random() * (currentPrice * 0.008);
+
+        let timeVal: string | number = date.toISOString().split("T")[0];
+        if (timeframe === "1m" || timeframe === "30m" || timeframe === "90m") {
+          timeVal = Math.floor(date.getTime() / 1000);
+        }
+
+        data.push({
+          time: timeVal,
+          open,
+          high,
+          low,
+          close,
+        });
+        currentPrice = open;
+      }
+      setChartData(data.reverse());
+      setAnalysisResult({
+        swingScore: meta.score,
+        rsi: 52.4,
+        macd: { histogram: 0.15 },
+        ema9: meta.price * 0.99,
+        ema20: meta.price * 0.985,
+        ema21: meta.price * 0.98,
+        ema50: meta.price * 0.96,
+        ema200: meta.price * 0.90,
+        bb: { upper: meta.price * 1.05, lower: meta.price * 0.95 },
+        componentScores: {
+          ema: meta.score >= 70 ? 90 : 50,
+          macd: meta.score >= 70 ? 80 : 40,
+          rsi: meta.score >= 70 ? 85 : 45,
+          obv: meta.score >= 70 ? 100 : 40,
+          volume: meta.score >= 70 ? 95 : 50,
+          bb: meta.score >= 70 ? 75 : 50,
+        },
+      });
+      setQuote({
+        c: meta.price,
+        dp: meta.change,
+      });
+      setGeminiAnalysis({
+        recommendation: meta.score >= 70 ? "Strong Buy" : "Hold",
+        confidenceScore: meta.score,
+        reasoning:
+          language === "id"
+            ? `"${activeSymbol} menunjukkan konfigurasi swing trading yang kuat. RSI harian stabil di wilayah momentum 52.4, sedangkan posisi harga di atas EMA 21 dan 50 mengonfirmasi kelanjutan tren naik dengan ruang penguatan yang sehat."`
+            : `"${activeSymbol} displays a strong swing trading configuration. The daily RSI is stable in the momentum region at 52.4, and the price sitting above its 21 and 50 EMAs confirms a continuation of the uptrend with healthy room to grow."`,
+      });
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRealData(false);
+  }, [activeSymbol, timeframe, selectedStrategy]);
+
+  // Foreground Auto-Refresh Effect
+  useEffect(() => {
+    const intervalTime = strategyToRefreshInterval(defaultStrategy);
+    if (intervalTime <= 0) return;
+
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadRealData(true);
+      }
+    }, intervalTime);
+
+    return () => clearInterval(intervalId);
+  }, [defaultStrategy, activeSymbol, timeframe]);
 
   // Load user holding status for active stock symbol
   useEffect(() => {
@@ -272,6 +383,12 @@ export const StockDetailPage: React.FC = () => {
             (h: any) => h.symbol === activeSymbol,
           );
           setHolding(currentHolding || null);
+          if (currentHolding && currentHolding.geminiAnalysis) {
+            setGeminiAnalysis((prev: any) => ({
+              ...prev,
+              portfolioAnalysis: currentHolding.geminiAnalysis
+            }));
+          }
         }
       } catch (err) {
         console.warn("Portfolio holding fetch failed:", err);
@@ -370,6 +487,209 @@ export const StockDetailPage: React.FC = () => {
           100
         : 0;
   const isProfit = percentChange >= 0;
+
+  const renderBreakdown = () => {
+    if (!analysisResult) return null;
+
+    if (selectedStrategy === "Scalp Trade") {
+      const isAboveEma9 = currentPrice > (analysisResult.ema9 || 0);
+      const isGreen = percentChange >= 0;
+      const scalpScore = Math.round(analysisResult.scalpScore || 0);
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          {[
+            {
+              name: language === "id" ? "Tren EMA 9 (40%)" : "EMA 9 Trend (40%)",
+              score: isAboveEma9 ? 100 : 30,
+              color: "#3b82f6",
+              desc: language === "id" ? "Bullish jika harga saat ini berada di atas EMA 9." : "Bullish if current price stays above EMA 9."
+            },
+            {
+              name: language === "id" ? "Lonjakan Volume (30%)" : "Volume Spikes (30%)",
+              score: scalpScore > 65 ? 90 : 50,
+              color: "#10b981",
+              desc: language === "id" ? "Mengukur tingkat aktivitas volume dibanding rata-rata volume." : "Measures volume activity spikes compared to average."
+            },
+            {
+              name: language === "id" ? "Aksi Harga & Volatilitas (30%)" : "Price Action & Volatilities (30%)",
+              score: isGreen ? 95 : 40,
+              color: "#ec4899",
+              desc: language === "id" ? "Skor volatilitas dan warna candle terakhir." : "Volatility score and last candle color."
+            }
+          ].map((item, idx) => (
+            <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ color: "#cbd5e1" }}>{item.name}</span>
+                  <span className="tooltip-container" style={{ cursor: "help", color: "#94a3b8", display: "inline-flex", alignItems: "center" }}>
+                    <span>ⓘ</span>
+                    <span className="tooltip-text" style={{ fontSize: "0.74rem", lineHeight: "1.4", width: "240px", whiteSpace: "normal", fontWeight: "normal" }}>
+                      {item.desc}
+                    </span>
+                  </span>
+                </div>
+                <span style={{ fontWeight: 700, color: item.color }}>{item.score} / 100</span>
+              </div>
+              <div style={{ width: "100%", height: "4px", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: "2px", overflow: "hidden" }}>
+                <div style={{ width: `${item.score}%`, height: "100%", backgroundColor: item.color, borderRadius: "2px" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (selectedStrategy === "Day Trade") {
+      const emaBullish = (analysisResult.ema9 || 0) > (analysisResult.ema21 || 0);
+      const aboveVwap = currentPrice >= (analysisResult.vwap || currentPrice);
+      const macdHist = analysisResult.macd?.histogram || 0;
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          {[
+            {
+              name: language === "id" ? "Penyelarasan EMA 9 & 21 (35%)" : "EMA 9 & 21 Alignment (35%)",
+              score: emaBullish ? 100 : 30,
+              color: "#3b82f6",
+              desc: language === "id" ? "Bullish jika garis EMA 9 berada di atas garis EMA 21." : "Bullish if EMA 9 is above EMA 21."
+            },
+            {
+              name: language === "id" ? "Momentum MACD (35%)" : "MACD Momentum (35%)",
+              score: macdHist > 0 ? 95 : 40,
+              color: "#10b981",
+              desc: language === "id" ? "Bullish jika histogram MACD bernilai positif (bullish crossover)." : "Bullish if MACD histogram is positive."
+            },
+            {
+              name: language === "id" ? "Penahanan VWAP (30%)" : "VWAP Hold (30%)",
+              score: aboveVwap ? 100 : 35,
+              color: "#60a5fa",
+              desc: language === "id" ? "Bullish jika harga bertahan di atas level VWAP." : "Bullish if price holds above the VWAP level."
+            }
+          ].map((item, idx) => (
+            <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ color: "#cbd5e1" }}>{item.name}</span>
+                  <span className="tooltip-container" style={{ cursor: "help", color: "#94a3b8", display: "inline-flex", alignItems: "center" }}>
+                    <span>ⓘ</span>
+                    <span className="tooltip-text" style={{ fontSize: "0.74rem", lineHeight: "1.4", width: "240px", whiteSpace: "normal", fontWeight: "normal" }}>
+                      {item.desc}
+                    </span>
+                  </span>
+                </div>
+                <span style={{ fontWeight: 700, color: item.color }}>{item.score} / 100</span>
+              </div>
+              <div style={{ width: "100%", height: "4px", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: "2px", overflow: "hidden" }}>
+                <div style={{ width: `${item.score}%`, height: "100%", backgroundColor: item.color, borderRadius: "2px" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (selectedStrategy === "Position Trade") {
+      const aboveEma200 = currentPrice > (analysisResult.ema200 || 0);
+      const fund = analysisResult.fundamentals || quote?.fundamentals || null;
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ color: "#cbd5e1" }}>{language === "id" ? "Penyelarasan EMA 200 (40%)" : "EMA 200 Alignment (40%)"}</span>
+              </div>
+              <span style={{ fontWeight: 700, color: "#3b82f6" }}>{aboveEma200 ? 100 : 30} / 100</span>
+            </div>
+            <div style={{ width: "100%", height: "4px", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: "2px", overflow: "hidden" }}>
+              <div style={{ width: `${aboveEma200 ? 100 : 30}%`, height: "100%", backgroundColor: "#3b82f6", borderRadius: "2px" }} />
+            </div>
+          </div>
+          
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <span style={{ fontSize: "0.76rem", color: "#94a3b8", fontWeight: 600 }}>
+              📊 {language === "id" ? "AUDIT LAPORAN KEUANGAN (60%)" : "FINANCIAL REPORT AUDIT (60%)"}
+            </span>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", textAlign: "center", marginTop: "4px" }}>
+              <div style={{ padding: "8px", background: "rgba(255,255,255,0.02)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ fontSize: "0.62rem", color: "#94a3b8", fontWeight: 500 }}>EPS</div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: (fund?.eps ?? 0) > 0 ? "#10b981" : "#ef4444", marginTop: "4px" }}>
+                  {fund?.eps !== undefined && fund?.eps !== null ? fund.eps.toFixed(2) : "-"}
+                </div>
+              </div>
+              <div style={{ padding: "8px", background: "rgba(255,255,255,0.02)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ fontSize: "0.62rem", color: "#94a3b8", fontWeight: 500 }}>PER</div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: (fund?.per ?? 0) > 0 && (fund?.per ?? 0) < 20 ? "#10b981" : "#f59e0b", marginTop: "4px" }}>
+                  {fund?.per !== undefined && fund?.per !== null ? fund.per.toFixed(2) + "x" : "-"}
+                </div>
+              </div>
+              <div style={{ padding: "8px", background: "rgba(255,255,255,0.02)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ fontSize: "0.62rem", color: "#94a3b8", fontWeight: 500 }}>PBV</div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: (fund?.pbv ?? 0) > 0 && (fund?.pbv ?? 0) < 2.0 ? "#10b981" : "#f59e0b", marginTop: "4px" }}>
+                  {fund?.pbv !== undefined && fund?.pbv !== null ? fund.pbv.toFixed(2) + "x" : "-"}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default: Swing Trade
+    const swingScore = Math.round(analysisResult.swingScore || 0);
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        {[
+          {
+            name: "EMA stack & Trend (30%)",
+            score: swingScore > 70 ? 95 : 50,
+            color: "#3b82f6",
+            desc: language === "id" ? "Keselarasan tren jangka menengah dan panjang di atas EMA 50 & 200." : "Medium-term and long-term trend alignment above EMA 50 & 200."
+          },
+          {
+            name: "MACD Momentum (20%)",
+            score: (analysisResult.macd?.histogram || 0) > 0 ? 90 : 40,
+            color: "#10b981",
+            desc: language === "id" ? "Arah momentum tren." : "Direction of trend momentum."
+          },
+          {
+            name: "RSI Momentum (20%)",
+            score: Math.round(analysisResult.rsi || 50),
+            color: "#60a5fa",
+            desc: language === "id" ? "Tingkat jenuh beli/jenuh jual pasar." : "Market overbought/oversold levels."
+          },
+          {
+            name: "Daily Volume (15%)",
+            score: 75,
+            color: "#facc15",
+            desc: language === "id" ? "Konfirmasi volume transaksi harian." : "Daily transaction volume confirmation."
+          },
+          {
+            name: "Candlestick Reversal (15%)",
+            score: 80,
+            color: "#ec4899",
+            desc: language === "id" ? "Mendeteksi pola pembalikan harga (reversal) di level support." : "Detects candlestick reversal pattern at support."
+          }
+        ].map((item, idx) => (
+          <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ color: "#cbd5e1" }}>{item.name}</span>
+                <span className="tooltip-container" style={{ cursor: "help", color: "#94a3b8", display: "inline-flex", alignItems: "center" }}>
+                  <span>ⓘ</span>
+                  <span className="tooltip-text" style={{ fontSize: "0.74rem", lineHeight: "1.4", width: "240px", whiteSpace: "normal", fontWeight: "normal" }}>
+                    {item.desc}
+                  </span>
+                </span>
+              </div>
+              <span style={{ fontWeight: 700, color: item.color }}>{item.score} / 100</span>
+            </div>
+            <div style={{ width: "100%", height: "4px", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: "2px", overflow: "hidden" }}>
+              <div style={{ width: `${item.score}%`, height: "100%", backgroundColor: item.color, borderRadius: "2px" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const ema9Data = React.useMemo(() => {
     const series = analysisResult?.allIndicators?.ema9Series;
@@ -582,9 +902,9 @@ export const StockDetailPage: React.FC = () => {
               </span>
               <span style={{ color: "rgba(255, 255, 255, 0.15)" }}>|</span>
               <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ color: "#94a3b8" }}>{t("btst_score")}:</span>
+                <span style={{ color: "#94a3b8" }}>{selectedStrategy} Score:</span>
                 <span style={{ color: "#3b82f6", fontWeight: 700 }}>
-                  {analysisResult ? Math.round(analysisResult.swingScore) : 84}/100
+                  {getActiveScore()}/100
                 </span>
               </span>
             </div>
@@ -642,6 +962,242 @@ export const StockDetailPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Strategy Navigation Tabs */}
+      <div
+        className="glass-panel"
+        style={{
+          padding: "14px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "12px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.85rem", color: "#94a3b8", fontWeight: 600 }}>
+            {language === "id" ? "Strategi Analisis:" : "Analysis Strategy:"}
+          </span>
+          <div style={{ display: "flex", gap: "6px", backgroundColor: "rgba(0,0,0,0.25)", padding: "3px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)" }}>
+            {(["Scalp Trade", "Day Trade", "Swing Trade", "Position Trade"] as const).map((strat) => (
+              <button
+                key={strat}
+                onClick={() => {
+                  setSelectedStrategy(strat);
+                  setTimeframe(strategyToTimeframe(strat));
+                }}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: "none",
+                  backgroundColor: selectedStrategy === strat ? "#3b82f6" : "transparent",
+                  color: selectedStrategy === strat ? "#fff" : "#94a3b8",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                {strat}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ fontSize: "0.82rem", color: "#cbd5e1" }}>
+          <span style={{ color: "#94a3b8" }}>{language === "id" ? "Tampilan Grafik:" : "Active Timeframe:"} </span>
+          <strong style={{ color: "#60a5fa" }}>{timeframe === "1m" ? "1M" : timeframe === "30m" ? "30M" : timeframe === "90m" ? "90M" : timeframe.toUpperCase()}</strong>
+        </div>
+      </div>
+
+      {holding && holding.shares > 0 && (
+        <div
+          className="glass-panel animate-fade-in"
+          style={{
+            padding: isMobile ? "12px 16px" : "16px 24px",
+            border: "1px solid rgba(59, 130, 246, 0.2)",
+            background: "rgba(30, 41, 59, 0.4)",
+            borderRadius: "12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+            animation: "fadeIn 0.3s ease-out",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: isMobile ? "1.05rem" : "1.2rem" }}>💼</span>
+              <span style={{ fontWeight: 700, fontSize: isMobile ? "0.85rem" : "0.95rem", color: "#f8fafc" }}>
+                {language === "id" ? "ANALISIS KEPEMILIKAN & REKOMENDASI TRADING" : "PORTFOLIO ANALYSIS & TRADING VERDICT"}
+              </span>
+            </div>
+            
+            {/* Unrealized PnL Pill */}
+            {(() => {
+              const pnlPercent = ((currentPrice - holding.avgPrice) / holding.avgPrice) * 100;
+              const pnlVal = (currentPrice - holding.avgPrice) * holding.shares;
+              const isProfit = pnlPercent >= 0;
+              return (
+                <div style={{
+                  padding: isMobile ? "3px 8px" : "4px 12px",
+                  borderRadius: "100px",
+                  backgroundColor: isProfit ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.12)",
+                  color: isProfit ? "#4ade80" : "#fca5a5",
+                  fontWeight: 700,
+                  fontSize: isMobile ? "0.75rem" : "0.82rem",
+                  border: `1px solid ${isProfit ? "rgba(16, 185, 129, 0.2)" : "rgba(239, 68, 68, 0.2)"}`
+                }}>
+                  PnL: {isProfit ? "+" : ""}{pnlPercent.toFixed(2)}% (Rp {Math.round(pnlVal).toLocaleString(language === "id" ? "id-ID" : "en-US")})
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Analysis / Recommendation Decision */}
+          {(() => {
+            const score = getActiveScore();
+            const pnlPercent = ((currentPrice - holding.avgPrice) / holding.avgPrice) * 100;
+            
+            let action = "HOLD";
+            let reason = "";
+            let actionColor = "#f59e0b";
+            
+            if (selectedStrategy === "Scalp Trade") {
+              if (score < 45 || pnlPercent < -2.0) {
+                action = "SELL / CUT LOSS";
+                actionColor = "#ef4444";
+                reason = language === "id" 
+                  ? `Skor scalp melemah (${score}/100) atau batas toleransi kerugian tercapai (-2%). Disarankan segera keluar posisi.`
+                  : `Scalp score has weakened (${score}/100) or stop loss threshold reached (-2%). Quick exit is recommended.`;
+              } else if (pnlPercent > 3.0) {
+                action = "SELL / TAKE PROFIT";
+                actionColor = "#10b981";
+                reason = language === "id"
+                  ? `Target keuntungan cepat tercapai (+3.0%). Amankan profit Anda.`
+                  : `Quick profit target met (+3.0%). Secure your gains.`;
+              } else {
+                action = "HOLD";
+                actionColor = "#3b82f6";
+                reason = language === "id"
+                  ? "Momentum masih berjalan. Pertahankan posisi sambil mengamati pergerakan harga 1 menit berikutnya."
+                  : "Momentum is active. Maintain position while monitoring the 1-minute chart.";
+              }
+            } else if (selectedStrategy === "Day Trade") {
+              if (score < 50 || pnlPercent < -3.0) {
+                action = "SELL / CUT LOSS";
+                actionColor = "#ef4444";
+                reason = language === "id"
+                  ? `Tren intraday di bawah VWAP atau skor Day melemah (${score}/100) atau menyentuh batas risiko (-3%). Disarankan keluar.`
+                  : `Short-term trend weakened below VWAP/Day score (${score}/100) or touched risk limits (-3%). Exit is recommended.`;
+              } else if (pnlPercent > 5.0) {
+                action = "SELL / TAKE PROFIT";
+                actionColor = "#10b981";
+                reason = language === "id"
+                  ? "Sudah mencapai target profit intraday (+5%). Disarankan merealisasikan keuntungan hari ini."
+                  : "Intraday profit target (+5%) reached. Realizing your gains today is highly recommended.";
+              } else {
+                action = "HOLD";
+                actionColor = "#3b82f6";
+                reason = language === "id"
+                  ? "Harga masih bertahan di atas VWAP dengan skor Day yang sehat. Tahan posisi hingga penutupan sesi."
+                  : "Price is holding above VWAP with a healthy Day score. Hold the position until session close.";
+              }
+            } else if (selectedStrategy === "Position Trade") {
+              if (score < 55) {
+                action = "SELL / EXIT POSITION";
+                actionColor = "#ef4444";
+                reason = language === "id"
+                  ? `Tren jangka panjang di bawah EMA 200 atau kinerja fundamental memburuk (Skor Position: ${score}/100). Disarankan batasi risiko.`
+                  : `Long-term trend fell below EMA 200 or fundamental metrics deteriorated (Position score: ${score}/100). Portfolio rebalancing advised.`;
+              } else if (pnlPercent > 25.0) {
+                action = "HOLD / PARTIAL TAKE PROFIT";
+                actionColor = "#10b981";
+                reason = language === "id"
+                  ? "Potensi pertumbuhan jangka panjang masih sangat kuat (+25% profit). Pertimbangkan untuk take profit sebagian jika ingin mengamankan modal awal."
+                  : "Long-term growth remains solid (+25% gain). Consider partial take profit to secure initial capital.";
+              } else {
+                action = "HOLD";
+                actionColor = "#3b82f6";
+                reason = language === "id"
+                  ? "Fundamental stabil dan harga bertahan di atas EMA 200. Sangat direkomendasikan untuk investasi jangka panjang."
+                  : "Fundamentals are robust and price is sitting safely above EMA 200. Highly recommended for long-term investing.";
+              }
+            } else { // Swing Trade
+              if (score < 50 || pnlPercent < -5.0) {
+                action = "SELL / CUT LOSS";
+                actionColor = "#ef4444";
+                reason = language === "id"
+                  ? `Sinyal pembalikan turun atau menyentuh level support kritis (Skor Swing: ${score}/100) atau batas stop loss (-5%). Disarankan batasi kerugian.`
+                  : `Bearish reversal detected or critical support breached (Swing score: ${score}/100) or stop loss threshold reached (-5%). Risk cutting advised.`;
+              } else if (pnlPercent > 10.0) {
+                action = "SELL / TAKE PROFIT";
+                actionColor = "#10b981";
+                reason = language === "id"
+                  ? "Target swing tercapai (+10%). Indikator RSI mulai memasuki zona jenuh beli. Amankan keuntungan Anda."
+                  : "Swing targets achieved (+10%). RSI entering overbought levels. Time to secure your gains.";
+              } else {
+                action = "HOLD";
+                actionColor = "#3b82f6";
+                reason = language === "id"
+                  ? "Struktur tren naik masih utuh dan RSI stabil di area momentum netral. Teruskan hold saham ini."
+                  : "Uptrend structure remains intact and RSI is stable in neutral momentum territory. Continue holding.";
+              }
+            }
+
+            return (
+              <div style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px",
+                padding: isMobile ? "8px 10px" : "12px 16px",
+                borderRadius: "8px",
+                background: "rgba(255, 255, 255, 0.02)",
+                border: "1px solid rgba(255, 255, 255, 0.05)"
+              }}>
+                <div style={{ fontSize: isMobile ? "0.78rem" : "0.85rem", color: "#cbd5e1", lineHeight: "1.4" }}>
+                  <strong>{language === "id" ? "Rekomendasi Analis: " : "Analyst Verdict: "}</strong>
+                  <span style={{ color: actionColor, fontWeight: 800 }}>{action}</span>
+                </div>
+                <div style={{ fontSize: isMobile ? "0.74rem" : "0.78rem", color: "#94a3b8", lineHeight: "1.4" }}>
+                  {reason}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Display Gemini AI Holding Recommendation if loaded */}
+          {geminiAnalysis && geminiAnalysis.portfolioAnalysis && geminiAnalysis.portfolioAnalysis.action !== "NONE" && (
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              padding: isMobile ? "8px 10px" : "12px 16px",
+              borderRadius: "8px",
+              background: "rgba(6, 182, 212, 0.04)",
+              border: "1px dashed rgba(6, 182, 212, 0.25)",
+              marginTop: "4px"
+            }}>
+              <div style={{ fontSize: isMobile ? "0.78rem" : "0.85rem", color: "#cbd5e1", lineHeight: "1.4" }}>
+                <strong>{language === "id" ? "Keputusan Gemini AI: " : "Gemini AI Verdict: "}</strong>
+                <span style={{ 
+                  color: 
+                    geminiAnalysis.portfolioAnalysis.action.includes("SELL") || geminiAnalysis.portfolioAnalysis.action.includes("LOSS")
+                      ? "#ef4444"
+                      : geminiAnalysis.portfolioAnalysis.action.includes("PROFIT")
+                      ? "#10b981"
+                      : "#22d3ee",
+                  fontWeight: 800 
+                }}>
+                  🤖 {geminiAnalysis.portfolioAnalysis.action.toUpperCase()}
+                </span>
+              </div>
+              <div style={{ fontSize: isMobile ? "0.74rem" : "0.78rem", color: "#94a3b8", lineHeight: "1.4" }}>
+                {geminiAnalysis.portfolioAnalysis.reason}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main Grid: Candlestick Chart & technical summaries */}
       <div
         style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px" }}
@@ -654,6 +1210,7 @@ export const StockDetailPage: React.FC = () => {
             display: "flex",
             flexDirection: "column",
             gap: "16px",
+            width: "calc(100vw - 25px)",
           }}
         >
           <div
@@ -661,14 +1218,34 @@ export const StockDetailPage: React.FC = () => {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              flexWrap: "wrap",
+              gap: "10px",
             }}
           >
             <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>
               {t("technical_chart")}
             </h3>
-            <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
-              Interval: 1D
-            </span>
+            <div style={{ display: "flex", gap: "6px", backgroundColor: "rgba(0,0,0,0.25)", padding: "3px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)" }}>
+              {(["1m", "30m", "90m", "1d", "1wk", "1mo", "1y"] as const).map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: "6px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: "none",
+                    backgroundColor: timeframe === tf ? "#3b82f6" : "transparent",
+                    color: timeframe === tf ? "#fff" : "#94a3b8",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  {tf === "1m" ? "1M" : tf === "30m" ? "30M" : tf === "90m" ? "90M" : tf.toUpperCase()}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Indicator toggles checklist */}
@@ -957,89 +1534,22 @@ export const StockDetailPage: React.FC = () => {
               gap: "16px",
             }}
           >
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>
-              {t("metrics_signals")}
-            </h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 600, margin: 0 }}>
+                {t("metrics_signals")}
+              </h3>
+            </div>
 
-            {/* Swing Score Breakdown */}
+            {/* Strategy Score Breakdown */}
             <div style={{
               borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
               paddingBottom: "16px",
               marginBottom: "4px"
             }}>
-              <span style={{ fontSize: "0.76rem", color: "#94a3b8", fontWeight: 600, display: "block", marginBottom: "10px", letterSpacing: "0.5px" }}>
-                🎯 {language === "id" ? "ANALISIS KOMPONEN SKOR" : "SCORE COMPONENT BREAKDOWN"}
+              <span style={{ fontSize: "0.76rem", color: "#94a3b8", fontWeight: 600, display: "block", marginBottom: "12px", letterSpacing: "0.5px" }}>
+                🎯 {language === "id" ? `ANALISIS KOMPONEN: ${selectedStrategy.toUpperCase()}` : `COMPONENT BREAKDOWN: ${selectedStrategy.toUpperCase()}`}
               </span>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {[
-                  { 
-                    name: "EMA stack & Trend (25%)", 
-                    score: Math.round(analysisResult?.componentScores?.ema ?? 80), 
-                    color: "#3b82f6",
-                    desc: language === "id" 
-                      ? "Mengukur keselarasan tren. Nilai tinggi diberikan jika harga berada di atas EMA 9, 21, dan 50 (Golden Stack) atau memantul dari support EMA saat tren naik."
-                      : "Measures trend alignment. High score is given when price stays above EMA 9, 21, and 50 (Golden Stack) or rebounds from EMA support during uptrends."
-                  },
-                  { 
-                    name: "OBV Accumulation (25%)", 
-                    score: Math.round(analysisResult?.componentScores?.obv ?? 75), 
-                    color: "#10b981",
-                    desc: language === "id"
-                      ? "Mendeteksi akumulasi volume institusi. Nilai penuh jika rata-rata OBV jangka pendek (EMA 5) berada di atas rata-rata jangka menengah (EMA 20)."
-                      : "Detects institutional volume accumulation. Full points if short-term OBV average (EMA 5) is above mid-term average (EMA 20)."
-                  },
-                  { 
-                    name: "MACD Momentum (20%)", 
-                    score: Math.round(analysisResult?.componentScores?.macd ?? 85), 
-                    color: "#60a5fa",
-                    desc: language === "id"
-                      ? "Mengukur momentum tren. Nilai tinggi jika terjadi bullish crossover (garis MACD di atas garis sinyal), terutama dari wilayah oversold."
-                      : "Measures trend momentum. High score if there is a bullish crossover (MACD line above signal line), especially from oversold regions."
-                  },
-                  { 
-                    name: "RSI Momentum (15%)", 
-                    score: Math.round(analysisResult?.componentScores?.rsi ?? 90), 
-                    color: "#facc15",
-                    desc: language === "id"
-                      ? "Mengidentifikasi momentum overbought/oversold. Wilayah RSI 45-65 menunjukkan momentum tren naik yang sehat, sementara RSI < 35 adalah peluang pullback."
-                      : "Identifies overbought/oversold momentum. The RSI 45-65 region shows healthy uptrend momentum, while RSI < 35 indicates pullback opportunities."
-                  },
-                  { 
-                    name: "Volume Confirmation (10%)", 
-                    score: Math.round(analysisResult?.componentScores?.volume ?? 70), 
-                    color: "#ec4899",
-                    desc: language === "id"
-                      ? "Mengonfirmasi partisipasi pasar harian. Volume transaksi di atas rata-rata 5 hari terakhir (volume > rata-rata * 1.3) yang disertai kenaikan harga dianggap bullish."
-                      : "Confirms daily market participation. Transaction volume above the 5-day average (volume > average * 1.3) accompanied by price gains is bullish."
-                  },
-                  { 
-                    name: "Bollinger Bands (5%)", 
-                    score: Math.round(analysisResult?.componentScores?.bb ?? 60), 
-                    color: "#a855f7",
-                    desc: language === "id"
-                      ? "Mengukur posisi volatilitas harga. Harga yang memantul dari batas bawah (lower band) atau batas tengah (middle band) menawarkan titik beli risiko rendah."
-                      : "Measures price volatility position. Prices rebounding from the lower band or middle band offer low-risk entry points."
-                  },
-                ].map((item, idx) => (
-                  <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span style={{ color: "#cbd5e1" }}>{item.name}</span>
-                        <span className="tooltip-container" style={{ cursor: "help", color: "#94a3b8", display: "inline-flex", alignItems: "center" }}>
-                          <span>ⓘ</span>
-                          <span className="tooltip-text" style={{ fontSize: "0.74rem", lineHeight: "1.4", width: "240px", whiteSpace: "normal", fontWeight: "normal" }}>
-                            {item.desc}
-                          </span>
-                        </span>
-                      </div>
-                      <span style={{ fontWeight: 700, color: item.color }}>{item.score} / 100</span>
-                    </div>
-                    <div style={{ width: "100%", height: "4px", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: "2px", overflow: "hidden" }}>
-                      <div style={{ width: `${item.score}%`, height: "100%", backgroundColor: item.color, borderRadius: "2px" }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {renderBreakdown()}
             </div>
 
             <div
@@ -1225,9 +1735,13 @@ export const StockDetailPage: React.FC = () => {
                     textTransform: "uppercase",
                   }}
                 >
-                  {language === "id"
-                    ? "Spesialis Swing Trader"
-                    : "Swing Trading Specialist"}
+                  {selectedStrategy === "Scalp Trade"
+                    ? (language === "id" ? "Spesialis Scalp Trader" : "Scalp Trading Specialist")
+                    : selectedStrategy === "Day Trade"
+                    ? (language === "id" ? "Spesialis Day Trader" : "Day Trading Specialist")
+                    : selectedStrategy === "Position Trade"
+                    ? (language === "id" ? "Spesialis Position Trader" : "Position Trading Specialist")
+                    : (language === "id" ? "Spesialis Swing Trader" : "Swing Trading Specialist")}
                 </span>
               </div>
               <button

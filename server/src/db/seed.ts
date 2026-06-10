@@ -33,7 +33,8 @@ async function seed() {
       { key: "swing_sl_percent", value: "-4.0" },
       { key: "swing_tsl_enabled", value: "true" },
       { key: "swing_tsl_trigger_percent", value: "5.0" },
-      { key: "swing_tsl_trail_percent", value: "2.5" }
+      { key: "swing_tsl_trail_percent", value: "2.5" },
+      { key: "default_strategy", value: "Day Trade" }
     ];
 
     for (const keyPair of apiKeys) {

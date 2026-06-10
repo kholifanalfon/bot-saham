@@ -84,6 +84,9 @@ async function migrate() {
         previous_close NUMERIC(12, 2),
         volume BIGINT,
         swing_score NUMERIC(5, 2) NOT NULL,
+        scalp_score NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+        day_score NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+        position_score NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
         rsi NUMERIC(5, 2) NOT NULL,
         macd_histogram NUMERIC(10, 4) NOT NULL,
         ema9 NUMERIC(12, 2) NOT NULL,
@@ -96,10 +99,13 @@ async function migrate() {
       )
     `);
 
-    // Alter table to add gemini_analysis column if it already exists
+    // Alter table to add new columns if they already exist
     await query(`
       ALTER TABLE stock_data 
-      ADD COLUMN IF NOT EXISTS gemini_analysis TEXT
+      ADD COLUMN IF NOT EXISTS gemini_analysis TEXT,
+      ADD COLUMN IF NOT EXISTS scalp_score NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+      ADD COLUMN IF NOT EXISTS day_score NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+      ADD COLUMN IF NOT EXISTS position_score NUMERIC(5, 2) NOT NULL DEFAULT 0.00
     `);
 
     // 6. Create Portfolio Table
@@ -112,6 +118,12 @@ async function migrate() {
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, symbol)
       )
+    `);
+
+    // Add gemini_analysis column to portfolio if it doesn't exist
+    await query(`
+      ALTER TABLE portfolio
+      ADD COLUMN IF NOT EXISTS gemini_analysis TEXT
     `);
 
     // 7. Create Transactions Table

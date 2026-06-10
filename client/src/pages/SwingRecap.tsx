@@ -143,7 +143,7 @@ export const SwingRecap: React.FC = () => {
         fetch(`${API_URL}/api/portfolio/journals`, { credentials: 'include' }),
         fetch(`${API_URL}/api/portfolio/journals/tag-analytics`, { credentials: 'include' }),
       ]);
-      if (!recapRes.ok) throw new Error('Gagal memuat data swing recap');
+      if (!recapRes.ok) throw new Error('Gagal memuat data rekap trading');
       const recapJson = await recapRes.json();
       setData(recapJson);
 
@@ -260,7 +260,7 @@ export const SwingRecap: React.FC = () => {
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: '16px' }}>
       <div style={{ width: '48px', height: '48px', borderRadius: '50%', border: '3px solid rgba(99,102,241,0.3)', borderTop: '3px solid #818cf8', animation: 'spin 1s linear infinite' }} />
-      <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Menghitung rekap swing trading...</p>
+      <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Menghitung rekap trading...</p>
     </div>
   );
 
@@ -330,10 +330,10 @@ export const SwingRecap: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontSize: '1.85rem', fontWeight: 800, marginBottom: '6px', background: 'linear-gradient(90deg, #f1f5f9, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            📊 Swing Trading Recap
+            📊 My Trading Recap
           </h1>
           <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
-            Rekap realized P&amp;L dari semua transaksi swing trading yang telah diselesaikan (buy → sell)
+            Rekap realized P&amp;L dari semua transaksi trading yang telah diselesaikan (buy → sell)
           </p>
         </div>
         <button onClick={fetchRecap} style={{ padding: '9px 18px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', color: '#a5b4fc', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>

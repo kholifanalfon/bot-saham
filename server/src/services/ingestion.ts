@@ -3,6 +3,7 @@ import {
   getHistoricalData,
   getYahooQuote,
   getHistoricalDataForDates,
+  getFundamentals,
 } from "./yahoo-finance.js";
 import { performFullAnalysis } from "./technical-analysis.js";
 import { v4 as uuidv4 } from "uuid";
@@ -189,6 +190,7 @@ export async function runIngestionPipeline(
       console.log(`[Ingestion] Fetching data and analyzing ${symbol}...`);
 
       try {
+        const fundamentals = await getFundamentals(symbol);
         // A. Fetch history for technical calculations (RSI, MACD, EMAs)
         let history: any[] = [];
         if (targetDate && endDate) {
@@ -280,17 +282,18 @@ export async function runIngestionPipeline(
           const lows = slicedHistory.map((h) => h.low);
           const closes = slicedHistory.map((h) => h.close);
           const volumes = slicedHistory.map((h) => h.volume);
+          const opens = slicedHistory.map((h) => h.open);
 
-          const analysis = performFullAnalysis(highs, lows, closes, volumes);
+          const analysis = performFullAnalysis(highs, lows, closes, volumes, true, fundamentals, opens);
           const isNewest = lastCandleDate === history[history.length - 1].date;
 
           // D. Save combined raw and technical data to stock_data
           await query(
             `INSERT INTO stock_data (
                date, symbol, price, change_percent, high, low, open, previous_close, volume,
-               swing_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
+               swing_score, scalp_score, day_score, position_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
              ON CONFLICT (date, symbol) DO UPDATE SET
                price = EXCLUDED.price,
                change_percent = EXCLUDED.change_percent,
@@ -300,6 +303,9 @@ export async function runIngestionPipeline(
                previous_close = EXCLUDED.previous_close,
                volume = EXCLUDED.volume,
                swing_score = EXCLUDED.swing_score,
+               scalp_score = EXCLUDED.scalp_score,
+               day_score = EXCLUDED.day_score,
+               position_score = EXCLUDED.position_score,
                rsi = EXCLUDED.rsi,
                macd_histogram = EXCLUDED.macd_histogram,
                ema9 = EXCLUDED.ema9,
@@ -317,6 +323,9 @@ export async function runIngestionPipeline(
               prevClose,
               volume,
               analysis.swingScore,
+              analysis.scalpScore,
+              analysis.dayScore,
+              analysis.positionScore,
               analysis.rsi,
               (analysis.macd as any).histogram || 0,
               analysis.ema9,
@@ -405,6 +414,7 @@ export async function runHistoricalIngestion(
         `No historical data found for ${symbol} in range ${calcStartStr} to ${endDate}`,
       );
     }
+    const fundamentals = await getFundamentals(symbol);
 
     const targetDates = rawData.filter((d) => {
       const dDate = new Date(d.date);
@@ -434,15 +444,16 @@ export async function runHistoricalIngestion(
       const lows = subHistory.map((h) => h.low);
       const closes = subHistory.map((h) => h.close);
       const volumes = subHistory.map((h) => h.volume);
+      const opens = subHistory.map((h) => h.open);
 
-      const analysis = performFullAnalysis(highs, lows, closes, volumes);
+      const analysis = performFullAnalysis(highs, lows, closes, volumes, true, fundamentals, opens);
 
       await query(
         `INSERT INTO stock_data (
            date, symbol, price, change_percent, high, low, open, previous_close, volume,
-           swing_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
+           swing_score, scalp_score, day_score, position_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, FALSE)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, FALSE)
          ON CONFLICT (date, symbol) DO UPDATE SET
            price = EXCLUDED.price,
            change_percent = EXCLUDED.change_percent,
@@ -452,6 +463,9 @@ export async function runHistoricalIngestion(
            previous_close = EXCLUDED.previous_close,
            volume = EXCLUDED.volume,
            swing_score = EXCLUDED.swing_score,
+           scalp_score = EXCLUDED.scalp_score,
+           day_score = EXCLUDED.day_score,
+           position_score = EXCLUDED.position_score,
            rsi = EXCLUDED.rsi,
            macd_histogram = EXCLUDED.macd_histogram,
            ema9 = EXCLUDED.ema9,
@@ -472,6 +486,9 @@ export async function runHistoricalIngestion(
           targetIndex > 0 ? rawData[targetIndex - 1].close : target.open,
           target.volume,
           analysis.swingScore,
+          analysis.scalpScore,
+          analysis.dayScore,
+          analysis.positionScore,
           analysis.rsi,
           (analysis.macd as any).histogram || 0,
           analysis.ema9,
@@ -537,6 +554,7 @@ export async function ingestSingleStock(
 
   try {
     const history = await getHistoricalData(symbol, '3mo');
+    const fundamentals = await getFundamentals(symbol);
 
     if (history.length < 50) {
       throw new Error(
@@ -560,15 +578,16 @@ export async function ingestSingleStock(
     const lows = history.map((h) => h.low);
     const closes = history.map((h) => h.close);
     const volumes = history.map((h) => h.volume);
+    const opens = history.map((h) => h.open);
 
-    const analysis = performFullAnalysis(highs, lows, closes, volumes);
+    const analysis = performFullAnalysis(highs, lows, closes, volumes, true, fundamentals, opens);
 
     await query(
       `INSERT INTO stock_data (
          date, symbol, price, change_percent, high, low, open, previous_close, volume,
-         swing_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
+         swing_score, scalp_score, day_score, position_score, rsi, macd_histogram, ema9, ema21, ema50, is_active
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, TRUE)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, TRUE)
        ON CONFLICT (date, symbol) DO UPDATE SET
          price = EXCLUDED.price,
          change_percent = EXCLUDED.change_percent,
@@ -578,6 +597,9 @@ export async function ingestSingleStock(
          previous_close = EXCLUDED.previous_close,
          volume = EXCLUDED.volume,
          swing_score = EXCLUDED.swing_score,
+         scalp_score = EXCLUDED.scalp_score,
+         day_score = EXCLUDED.day_score,
+         position_score = EXCLUDED.position_score,
          rsi = EXCLUDED.rsi,
          macd_histogram = EXCLUDED.macd_histogram,
          ema9 = EXCLUDED.ema9,
@@ -586,7 +608,7 @@ export async function ingestSingleStock(
          is_active = EXCLUDED.is_active`,
       [
         lastDate, symbol, price, changePercent, high, low, open, prevClose, volume,
-        analysis.swingScore, analysis.rsi,
+        analysis.swingScore, analysis.scalpScore, analysis.dayScore, analysis.positionScore, analysis.rsi,
         (analysis.macd as any).histogram || 0,
         analysis.ema9, analysis.ema21, analysis.ema50,
       ],

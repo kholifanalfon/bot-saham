@@ -7,6 +7,7 @@ export const Settings: React.FC = () => {
   const { t, language } = useLanguageStore();
   const [usMarketEnabled, setUsMarketEnabled] = useState(false);
   const [geminiModel, setGeminiModel] = useState("gemini-1.5-flash");
+  const [defaultStrategy, setDefaultStrategy] = useState("Day Trade");
   const [btstTpPercent, setBtstTpPercent] = useState("8.0");
   const [btstSlPercent, setBtstSlPercent] = useState("-4.0");
   const [btstTslEnabled, setBtstTslEnabled] = useState(true);
@@ -68,6 +69,9 @@ export const Settings: React.FC = () => {
           setUsMarketEnabled(!!data.us_market_enabled);
           if (data.gemini_model) {
             setGeminiModel(data.gemini_model);
+          }
+          if (data.default_strategy) {
+            setDefaultStrategy(data.default_strategy);
           }
           if (data.swing_tp_percent) {
             setBtstTpPercent(data.swing_tp_percent);
@@ -303,6 +307,32 @@ export const Settings: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to save model settings:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStrategyChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newStrategy = e.target.value;
+    setDefaultStrategy(newStrategy);
+    try {
+      setSaving(true);
+      setSuccess(false);
+      const response = await fetch("http://localhost:3001/api/settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ default_strategy: newStrategy }),
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      }
+    } catch (error) {
+      console.error("Failed to save default strategy setting:", error);
     } finally {
       setSaving(false);
     }
@@ -557,7 +587,65 @@ export const Settings: React.FC = () => {
               </option>
             </select>
           </div>
-        </div>{" "}
+        </div>
+
+        {/* Default Trading Strategy Section */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "20px",
+            paddingBottom: "20px",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+              maxWidth: "65%",
+            }}
+          >
+            <h3
+              style={{ fontSize: "1.1rem", fontWeight: 600, color: "#f8fafc" }}
+            >
+              Default Trading Strategy
+            </h3>
+            <p
+              style={{ fontSize: "0.82rem", color: "#94a3b8", lineHeight: 1.5 }}
+            >
+              Pilih default strategi trading utama yang ingin Anda gunakan. Pilihan ini akan memengaruhi timeframe grafik default, interval auto-refresh halaman detail saham, serta prioritas sorting di screener.
+            </p>
+          </div>
+
+          <div>
+            <select
+              value={defaultStrategy}
+              onChange={handleStrategyChange}
+              disabled={saving}
+              style={{
+                padding: "10px 16px",
+                borderRadius: "8px",
+                backgroundColor: "rgba(0, 0, 0, 0.3)",
+                color: "#cbd5e1",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                fontSize: "0.85rem",
+                cursor: "pointer",
+                fontWeight: 600,
+                outline: "none",
+                minWidth: "200px",
+              }}
+            >
+              <option value="Scalp Trade">Scalp Trade</option>
+              <option value="Day Trade">Day Trade</option>
+              <option value="Swing Trade">Swing Trade</option>
+              <option value="Position Trade">Position Trade</option>
+            </select>
+          </div>
+        </div>
         {/* Gemini Target Stock Indices (Multi-select via Tom Select with custom key creation) */}
         <div
           style={{

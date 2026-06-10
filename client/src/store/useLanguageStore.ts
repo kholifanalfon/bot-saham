@@ -57,8 +57,8 @@ export const translations = {
     // 4-Tab translations
     all_tab: "Semua",
     priority_tab: "Prioritas",
-    idx_tab: "Pasar Indo (IDX)",
-    us_tab: "Pasar AS (US)",
+    idx_tab: "Pasar IDX",
+    us_tab: "Pasar US",
     // BTST Algorithm translations
     algorithm: "Algoritma Swing",
     // Settings translations

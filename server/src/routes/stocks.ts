@@ -33,13 +33,14 @@ router.get('/quote', async (req, res) => {
 router.get('/candles', async (req, res) => {
   const symbol = req.query.symbol as string;
   const period = (req.query.period as string) || '1mo';
+  const interval = req.query.interval as string;
 
   if (!symbol) {
     return res.status(400).json({ error: 'Stock symbol is required' });
   }
 
   try {
-    const historical = await getHistoricalData(symbol, period);
+    const historical = await getHistoricalData(symbol, period, interval);
     return res.status(200).json(historical);
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Error fetching historical data' });
@@ -61,6 +62,18 @@ router.get('/registry', async (req, res) => {
     const usEnabled = settingsRes.rows[0]?.value === 'true';
     const whereClause = usEnabled ? "" : "WHERE s.market = 'IDX'";
 
+    const defaultStrategyRes = await query("SELECT value FROM settings WHERE key = 'default_strategy'");
+    const defaultStrategy = defaultStrategyRes.rows[0]?.value || 'Day Trade';
+
+    let scoreColumn = 'swing_score';
+    if (defaultStrategy === 'Scalp Trade') {
+      scoreColumn = 'scalp_score';
+    } else if (defaultStrategy === 'Day Trade') {
+      scoreColumn = 'day_score';
+    } else if (defaultStrategy === 'Position Trade') {
+      scoreColumn = 'position_score';
+    }
+
     const result = await query(
       `SELECT 
         s.symbol, 
@@ -68,11 +81,15 @@ router.get('/registry', async (req, res) => {
         s.market, 
         s.is_active AS "isActive",
         COALESCE(s.category, 'core') AS "category",
-        COALESCE(d.swing_score, 0) AS "swingScore"
+        COALESCE(d.swing_score, 0) AS "swingScore",
+        COALESCE(d.scalp_score, 0) AS "scalpScore",
+        COALESCE(d.day_score, 0) AS "dayScore",
+        COALESCE(d.position_score, 0) AS "positionScore",
+        COALESCE(d.${scoreColumn}, 0) AS "activeScore"
        FROM stocks s
        LEFT JOIN stock_data d ON s.symbol = d.symbol AND d.is_active = true
        ${whereClause}
-       ORDER BY "category" DESC, "swingScore" DESC, s.symbol ASC`
+       ORDER BY "category" DESC, "activeScore" DESC, s.symbol ASC`
     );
     return res.status(200).json(result.rows);
   } catch (error: any) {

@@ -50,6 +50,7 @@ export interface Holding {
   currentPrice: number;
   pnl: number;
   pnlPercent: number;
+  geminiAnalysis?: { action: string; reason: string } | null;
 }
 
 export interface Transaction {

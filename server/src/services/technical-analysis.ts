@@ -52,172 +52,249 @@ export function calculateOBV(prices: number[], volumes: number[]): number[] {
   return obv;
 }
 
-export function calculateSwingScore(
+export function calculateVWAP(highs: number[], lows: number[], closes: number[], volumes: number[], period: number = 20): number[] {
+  const vwap: number[] = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) {
+      vwap.push(closes[i]);
+      continue;
+    }
+    let sumTPV = 0;
+    let sumVol = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      const tp = (highs[j] + lows[j] + closes[j]) / 3;
+      sumTPV += tp * volumes[j];
+      sumVol += volumes[j];
+    }
+    vwap.push(sumVol > 0 ? sumTPV / sumVol : closes[i]);
+  }
+  return vwap;
+}
+
+export function detectBullishReversal(
+  highs: number[],
+  lows: number[],
+  opens: number[],
+  closes: number[]
+): boolean {
+  const len = closes.length;
+  if (len < 2) return false;
+  
+  const currentClose = closes[len - 1];
+  const currentOpen = opens[len - 1];
+  const currentHigh = highs[len - 1];
+  const currentLow = lows[len - 1];
+  
+  const prevClose = closes[len - 2];
+  const prevOpen = opens[len - 2];
+  
+  const body = Math.abs(currentClose - currentOpen);
+  const range = currentHigh - currentLow;
+  
+  const isHammer = range > 0 && (body / range < 0.3) && (Math.min(currentOpen, currentClose) - currentLow) > (range * 0.5);
+  
+  const isBullishEngulfing = (prevClose < prevOpen) && (currentClose > currentOpen) && (currentClose >= prevOpen) && (currentOpen <= prevClose);
+  
+  return isHammer || isBullishEngulfing;
+}
+
+export function calculateScalpScore(
   prices: number[],
-  rsiVal: number,
-  macdVal: { macd?: number; signal?: number; histogram?: number } | undefined,
+  ema9Val: number,
+  volume: number[]
+): number {
+  if (prices.length === 0) return 0;
+  const currentPrice = prices[prices.length - 1];
+  const prevPrice = prices.length > 1 ? prices.length - 2 : currentPrice;
+  const isGreen = currentPrice > prevPrice;
+
+  const emaScore = currentPrice > ema9Val ? 100 : 30;
+
+  let volScore = 50;
+  if (volume.length > 5) {
+    const currentVol = volume[volume.length - 1];
+    const avgVol = volume.slice(-6, -1).reduce((a, b) => a + b, 0) / 5;
+    if (currentVol > avgVol * 1.5) {
+      volScore = isGreen ? 100 : 40;
+    } else if (currentVol > avgVol) {
+      volScore = isGreen ? 80 : 50;
+    } else {
+      volScore = isGreen ? 60 : 45;
+    }
+  }
+
+  const dailyReturn = prevPrice > 0 ? Math.abs(currentPrice - prevPrice) / prevPrice : 0;
+  let volatilityScore = 50;
+  if (dailyReturn > 0.015) {
+    volatilityScore = isGreen ? 100 : 35;
+  } else if (dailyReturn > 0.005) {
+    volatilityScore = isGreen ? 80 : 50;
+  } else {
+    volatilityScore = 50;
+  }
+
+  return emaScore * 0.4 + volScore * 0.3 + volatilityScore * 0.3;
+}
+
+export function calculateDayScore(
+  prices: number[],
   ema9Val: number,
   ema21Val: number,
-  ema50Val: number,
-  volume: number[],
-  bollingerBands: { upper?: number; lower?: number; middle?: number } | undefined,
-  adxVal: number = 25,
-  isMarketBullish: boolean = true
-): { score: number; details: { ema: number; macd: number; rsi: number; obv: number; volume: number; bb: number } } {
-  if (prices.length === 0) return { score: 0, details: { ema: 0, macd: 0, rsi: 0, obv: 0, volume: 0, bb: 0 } };
+  macdVal: { macd?: number; signal?: number; histogram?: number } | undefined,
+  vwapVal: number
+): number {
+  if (prices.length === 0) return 0;
   const currentPrice = prices[prices.length - 1];
-  const prevPrice = prices.length > 1 ? prices[prices.length - 2] : currentPrice;
-  const isGreenCandle = currentPrice > prevPrice;
-  const aboveEma50 = currentPrice > ema50Val;
 
-  // --- Anti-Manipulation: Cap volume spikes at 5x of 5-day average ---
-  let sanitizedVolume = volume;
-  if (volume.length > 5) {
-    const recentAvg = volume.slice(-6, -1).reduce((a, b) => a + b, 0) / 5;
-    const cap = recentAvg * 5;
-    sanitizedVolume = volume.map((v) => Math.min(v, cap));
-  }
-
-  // 1. Trend & EMA Stack (25%) - Crucial for swing trading
   let emaScore = 50;
-  const aboveEma9 = currentPrice > ema9Val;
-  const aboveEma21 = currentPrice > ema21Val;
-  const isEmaBullishStack = ema9Val > ema21Val && ema21Val > ema50Val;
-
-  if (aboveEma9 && aboveEma21 && aboveEma50) {
-    emaScore = isEmaBullishStack ? 100 : 85;
-  } else if (aboveEma21 && aboveEma50) {
-    emaScore = 75; // Healthy pullback in an uptrend
-  } else if (aboveEma50) {
-    emaScore = 60; // Support test at EMA50
+  if (currentPrice > ema9Val && ema9Val > ema21Val) {
+    emaScore = 100;
+  } else if (currentPrice > ema21Val) {
+    emaScore = 70;
   } else {
-    emaScore = 25; // Bearish phase
+    emaScore = 30;
   }
 
-  // 2. MACD Score (15%) — weight reduced from 20% to mitigate multicollinearity with EMA
   let macdScore = 50;
   if (macdVal) {
     const hist = macdVal.histogram || 0;
     const macdLine = macdVal.macd || 0;
     const signalLine = macdVal.signal || 0;
-
     if (macdLine > signalLine) {
-      if (macdLine >= 0) {
-        macdScore = hist > 0 ? 95 : 80; // Stable uptrend momentum
-      } else {
-        macdScore = 85; // Strong bullish crossover from oversold territory
-      }
+      macdScore = hist > 0 ? 100 : 80;
     } else {
-      // Bearish crossover
-      macdScore = macdLine < 0 ? 15 : 40;
+      macdScore = macdLine < 0 ? 20 : 45;
     }
   }
 
-  // 3. RSI Score (15%) - Support/pullback zones or momentum breakouts
+  const vwapScore = currentPrice >= vwapVal ? 100 : 35;
+
+  return emaScore * 0.35 + macdScore * 0.35 + vwapScore * 0.30;
+}
+
+export function calculateSwingScore(
+  prices: number[],
+  rsiVal: number,
+  macdVal: { macd?: number; signal?: number; histogram?: number } | undefined,
+  ema50Val: number,
+  ema200Val: number,
+  volume: number[],
+  hasBullishReversal: boolean,
+  isMarketBullish: boolean = true
+): number {
+  if (prices.length === 0) return 0;
+  const currentPrice = prices[prices.length - 1];
+  const prevPrice = prices.length > 1 ? prices[prices.length - 2] : currentPrice;
+  const isGreen = currentPrice > prevPrice;
+
+  let emaScore = 50;
+  if (currentPrice > ema50Val && ema50Val > ema200Val) {
+    emaScore = currentPrice > ema200Val ? 100 : 80;
+  } else if (currentPrice > ema50Val) {
+    emaScore = 75;
+  } else if (currentPrice > ema200Val) {
+    emaScore = 60;
+  } else {
+    emaScore = 25;
+  }
+
+  let macdScore = 50;
+  if (macdVal) {
+    const hist = macdVal.histogram || 0;
+    const macdLine = macdVal.macd || 0;
+    const signalLine = macdVal.signal || 0;
+    if (macdLine > signalLine) {
+      macdScore = hist > 0 ? 100 : 80;
+    } else {
+      macdScore = macdLine < 0 ? 20 : 45;
+    }
+  }
+
   let rsiScore = 50;
   if (rsiVal >= 45 && rsiVal <= 65) {
-    rsiScore = aboveEma50 ? 90 : 60; // Strong swing zone in an uptrend
+    rsiScore = currentPrice > ema50Val ? 95 : 60;
   } else if (rsiVal < 35) {
-    rsiScore = aboveEma50 ? 85 : 40; // Oversold bounce opportunity (best if general trend is up)
+    rsiScore = currentPrice > ema50Val ? 90 : 40;
   } else if (rsiVal > 70) {
-    rsiScore = 30; // Overbought, high risk of cooling off
-  } else {
-    rsiScore = 50;
+    rsiScore = 30;
   }
 
-  // 4. OBV Volume Accumulation Trend (25%) - Institutional flow confirmation
-  // Uses sanitized (anti-manipulation) volume
-  let obvScore = 50;
-  const obvSeries = calculateOBV(prices, sanitizedVolume);
-  if (obvSeries.length >= 20) {
-    const obvEma5 = calculateEMA(obvSeries, 5);
-    const obvEma20 = calculateEMA(obvSeries, 20);
-    if (obvEma5.length > 0 && obvEma20.length > 0) {
-      const lastEma5 = obvEma5[obvEma5.length - 1];
-      const lastEma20 = obvEma20[obvEma20.length - 1];
-      obvScore = lastEma5 > lastEma20 ? 100 : 40;
-    }
-  }
-
-  // 5. Volume Confirmation Score (10%) - Uses sanitized volume
-  let volumeScore = 50;
-  if (sanitizedVolume.length > 5) {
-    const currentVolume = sanitizedVolume[sanitizedVolume.length - 1];
-    const recentVolumes = sanitizedVolume.slice(-6, -1);
-    const avgVolume = recentVolumes.reduce((a, b) => a + b, 0) / recentVolumes.length;
-
-    if (currentVolume > avgVolume * 1.3) {
-      volumeScore = isGreenCandle ? 95 : 30; // High volume push up is bullish
+  let volScore = 50;
+  if (volume.length > 5) {
+    const currentVol = volume[volume.length - 1];
+    const avgVol = volume.slice(-6, -1).reduce((a, b) => a + b, 0) / 5;
+    if (currentVol > avgVol * 1.3) {
+      volScore = isGreen ? 95 : 35;
     } else {
-      volumeScore = isGreenCandle ? 70 : 45;
+      volScore = isGreen ? 75 : 45;
     }
   }
 
-  // 6. Bollinger Bands Score (10%) — weight raised from 5% to 10%; now includes Squeeze detection
-  let bbScore = 50;
-  if (bollingerBands && bollingerBands.lower != null && bollingerBands.upper != null) {
-    const bbRange = bollingerBands.upper - bollingerBands.lower;
-    const positionPercent = bbRange > 0 ? (currentPrice - bollingerBands.lower) / bbRange : 0.5;
-
-    // Squeeze detection: bandwidth < 3% of middle band = tight consolidation before breakout
-    const midBand = bollingerBands.middle ?? ((bollingerBands.upper + bollingerBands.lower) / 2);
-    const isSqueeze = midBand > 0 && (bbRange / midBand) < 0.03;
-
-    if (positionPercent <= 0.20) {
-      // Near lower band
-      if (isSqueeze && aboveEma50) {
-        bbScore = 95; // Squeeze + lower band + uptrend = high-probability coiled spring
-      } else {
-        bbScore = aboveEma50 ? 90 : 40; // Bouncing from lower band in uptrend
-      }
-    } else if (positionPercent >= 0.45 && positionPercent <= 0.55) {
-      // Near mid-band
-      if (isSqueeze && aboveEma50) {
-        bbScore = 90; // Squeeze + mid-band hold in uptrend = breakout imminent
-      } else {
-        bbScore = aboveEma50 ? 75 : 50; // Mid-band support bounce
-      }
-    } else if (positionPercent >= 0.80) {
-      // Near upper band — riding or breaking out
-      bbScore = isGreenCandle ? 80 : 40;
-    } else {
-      bbScore = 60;
-    }
+  const nearSupport = Math.abs(currentPrice - ema50Val) / ema50Val < 0.03 || Math.abs(currentPrice - ema200Val) / ema200Val < 0.03;
+  let reversalScore = 50;
+  if (hasBullishReversal) {
+    reversalScore = nearSupport ? 100 : 80;
+  } else if (nearSupport && isGreen) {
+    reversalScore = 70;
   }
 
-  // --- Compute total weighted swing score ---
-  // Weights: EMA 25% | MACD 15% | RSI 15% | OBV 25% | Volume 10% | BB 10% = 100%
-  let totalScore =
-    emaScore * 0.25 +
-    macdScore * 0.15 +
-    rsiScore * 0.15 +
-    obvScore * 0.25 +
-    volumeScore * 0.10 +
-    bbScore * 0.10;
+  let totalScore = emaScore * 0.30 + macdScore * 0.20 + rsiScore * 0.20 + volScore * 0.15 + reversalScore * 0.15;
 
-  // --- Filter #1: ADX Whipsaw Guard ---
-  // If ADX < 20, the market is trending too weakly (sideways/choppy). Cap max score at 60.
-  if (adxVal < 20) {
-    totalScore = Math.min(totalScore, 60);
-  }
-
-  // --- Filter #2: Market Regime Penalty ---
-  // If macro market is bearish (e.g. IHSG < MA200), apply a 20% score penalty.
   if (!isMarketBullish) {
     totalScore = totalScore * 0.8;
   }
 
-  return {
-    score: Math.min(Math.max(totalScore, 0), 100),
-    details: {
-      ema: emaScore,
-      macd: macdScore,
-      rsi: rsiScore,
-      obv: obvScore,
-      volume: volumeScore,
-      bb: bbScore
+  return Math.min(Math.max(totalScore, 0), 100);
+}
+
+export function calculatePositionScore(
+  currentPrice: number,
+  ema200Val: number,
+  fundamentals: { eps: number | null; per: number | null; pbv: number | null } | null
+): number {
+  const techScore = currentPrice > ema200Val ? 100 : 30;
+  if (!fundamentals || (fundamentals.eps === null && fundamentals.per === null && fundamentals.pbv === null)) {
+    return techScore;
+  }
+
+  let fundScore = 50;
+  let count = 0;
+  let sum = 0;
+
+  if (fundamentals.eps !== null) {
+    sum += fundamentals.eps > 0 ? 100 : 20;
+    count++;
+  }
+
+  if (fundamentals.per !== null) {
+    if (fundamentals.per > 0 && fundamentals.per <= 15) {
+      sum += 100;
+    } else if (fundamentals.per > 15 && fundamentals.per <= 25) {
+      sum += 75;
+    } else if (fundamentals.per > 25) {
+      sum += 40;
+    } else {
+      sum += 15;
     }
-  };
+    count++;
+  }
+
+  if (fundamentals.pbv !== null) {
+    if (fundamentals.pbv > 0 && fundamentals.pbv <= 1.5) {
+      sum += 100;
+    } else if (fundamentals.pbv > 1.5 && fundamentals.pbv <= 3.0) {
+      sum += 75;
+    } else {
+      sum += 40;
+    }
+    count++;
+  }
+
+  if (count > 0) {
+    fundScore = sum / count;
+  }
+
+  return Math.min(Math.max(techScore * 0.4 + fundScore * 0.6, 0), 100);
 }
 
 export function performFullAnalysis(
@@ -225,13 +302,16 @@ export function performFullAnalysis(
   lows: number[],
   closes: number[],
   volume: number[],
-  isMarketBullish: boolean = true
+  isMarketBullish: boolean = true,
+  fundamentals: { eps: number | null; per: number | null; pbv: number | null } | null = null,
+  opens?: number[]
 ) {
   if (closes.length < 50) {
     throw new Error('Not enough data to calculate core technical indicators (minimum 50 periods required)');
   }
 
-  const prices = closes; // For backwards compatibility inside function
+  const prices = closes;
+  const openPrices = opens || closes;
   const rsis = calculateRSI(prices);
   const macds = calculateMACD(prices);
   const ema9s = calculateEMA(prices, 9);
@@ -241,7 +321,6 @@ export function performFullAnalysis(
   const ema200s = calculateEMA(prices, 200);
   const bbs = calculateBollingerBands(prices);
   
-  // Calculate ADX
   const adxSeries = calculateADX(highs, lows, closes);
   const currentAdx = adxSeries.length > 0 ? adxSeries[adxSeries.length - 1].adx || 25 : 25;
 
@@ -255,9 +334,15 @@ export function performFullAnalysis(
   const ema200 = ema200s.length > 0 ? ema200s[ema200s.length - 1] : currentPrice;
   const bb = bbs.length > 0 ? bbs[bbs.length - 1] : { upper: currentPrice, lower: currentPrice, middle: currentPrice };
 
-  const { score: swingScore, details: componentScores } = calculateSwingScore(
-    prices, rsi, macd, ema9, ema21, ema50, volume, bb, currentAdx, isMarketBullish
-  );
+  const vwaps = calculateVWAP(highs, lows, closes, volume);
+  const currentVwap = vwaps.length > 0 ? vwaps[vwaps.length - 1] : currentPrice;
+
+  const hasBullishReversal = detectBullishReversal(highs, lows, openPrices, closes);
+
+  const scalpScore = calculateScalpScore(prices, ema9, volume);
+  const dayScore = calculateDayScore(prices, ema9, ema21, macd, currentVwap);
+  const swingScore = calculateSwingScore(prices, rsi, macd, ema50, ema200, volume, hasBullishReversal, isMarketBullish);
+  const positionScore = calculatePositionScore(currentPrice, ema200, fundamentals);
 
   return {
     rsi,
@@ -269,8 +354,11 @@ export function performFullAnalysis(
     ema200,
     bb,
     adx: currentAdx,
+    vwap: currentVwap,
+    scalpScore,
+    dayScore,
     swingScore,
-    componentScores,
+    positionScore,
     allIndicators: {
       rsiSeries: rsis,
       macdSeries: macds,
@@ -280,7 +368,8 @@ export function performFullAnalysis(
       ema50Series: ema50s,
       ema200Series: ema200s,
       bbSeries: bbs,
-      adxSeries: adxSeries
+      adxSeries: adxSeries,
+      vwapSeries: vwaps
     }
   };
 }
