@@ -568,16 +568,22 @@ Each object must have exactly these fields:
     fetchedStocks = fallbackStocks;
   }
 
-  // Write/Sync to PostgreSQL
+  // Write/Sync to PostgreSQL — pure UPSERT, no deletion
   try {
     console.log(
-      "[AI Stock Sync] Synchronizing stock registry into database...",
+      "[AI Stock Sync] Synchronizing stock registry into database (upsert only — no data will be deleted)...",
     );
 
-    // Set is_active = false for existing stocks first, so we update the list of active ones
-    await query("DELETE FROM stocks");
+    let inserted = 0;
+    let updated = 0;
 
     for (const stock of fetchedStocks) {
+      // Check if symbol already exists
+      const existing = await query(
+        "SELECT symbol FROM stocks WHERE symbol = $1",
+        [stock.symbol],
+      );
+
       await query(
         `INSERT INTO stocks (symbol, name, market, is_active, category)
          VALUES ($1, $2, $3, true, $4)
@@ -588,6 +594,12 @@ Each object must have exactly these fields:
            category = EXCLUDED.category`,
         [stock.symbol, stock.name, stock.market, stock.category || "core"],
       );
+
+      if (existing.rowCount && existing.rowCount > 0) {
+        updated++;
+      } else {
+        inserted++;
+      }
     }
 
     const activeCountRes = await query(
@@ -597,8 +609,11 @@ Each object must have exactly these fields:
       "SELECT COUNT(*) FROM stocks WHERE is_active = true AND category = 'swing_candidate'",
     );
     console.log(`[AI Stock Sync] Database synchronized successfully!`);
+    console.log(`  ↳ Inserted (new): ${inserted} stocks`);
+    console.log(`  ↳ Updated (existing): ${updated} stocks`);
     console.log(`  ↳ Total active stocks: ${activeCountRes.rows[0].count}`);
     console.log(`  ↳ Swing trading candidates: ${swingCountRes.rows[0].count}`);
+
   } catch (dbErr) {
     console.error(
       "[AI Stock Sync] Database error during stock synchronization:",
