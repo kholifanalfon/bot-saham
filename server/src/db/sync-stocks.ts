@@ -568,11 +568,84 @@ Each object must have exactly these fields:
     fetchedStocks = fallbackStocks;
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // STEP 2: Query Gemini for SIDEWAYS stocks (bad for swing trading)
+  // These will be deactivated in DB. If they appear in main list later, they get reactivated.
+  // ─────────────────────────────────────────────────────────────
+  let sidewaysSymbols: string[] = [];
+
+  if (geminiApiKey && !useFallback) {
+    try {
+      console.log(
+        "[AI Stock Sync] Querying Gemini AI for sideways/ranging stocks to deactivate...",
+      );
+      const genAI = new GoogleGenerativeAI(geminiApiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
+
+      // Build a set of all symbols we already know about (to limit scope)
+      const knownSymbols = [
+        ...fetchedStocks.map((s) => s.symbol),
+      ];
+
+      const sidewaysPrompt = `
+You are an elite swing trading analyst. Identify stocks that are CURRENTLY in a sideways/ranging/consolidation phase and are VERY POOR choices for swing traders RIGHT NOW.
+
+SidewayS criteria (one or more must apply):
+- Price has been ranging in a tight band (< 5% range) for 20+ trading days.
+- No clear trend direction — below all major EMAs (21, 50, 200) with no momentum.
+- Very low average daily volume — illiquid and hard to exit.
+- RSI stuck between 40–60 with no directional bias for 3+ weeks.
+- Repeated failed breakout attempts above resistance.
+- Stock is in a long-term downtrend with no signs of reversal.
+
+From this list of tracked stocks, identify which ones meet the sideways criteria:
+${knownSymbols.join(", ")}
+
+RULES:
+- Only return symbols that are GENUINELY in sideways/ranging mode RIGHT NOW.
+- Do NOT include swing candidates or trending stocks.
+- Return ONLY the JSON array of symbol strings, no explanation text.
+- If none qualify, return an empty array: []
+
+Example output: ["WIKA.JK", "BUKA.JK", "GOTO.JK"]
+`;
+
+      const result = await model.generateContent(sidewaysPrompt);
+      const rawText = result.response.text().trim();
+      const cleanJson = rawText
+        .replace(/^```json/i, "")
+        .replace(/^```/i, "")
+        .replace(/```$/, "")
+        .trim();
+
+      const parsed = JSON.parse(cleanJson);
+      if (Array.isArray(parsed)) {
+        sidewaysSymbols = parsed.filter(
+          (s): s is string => typeof s === "string",
+        );
+        console.log(
+          `[AI Stock Sync] Gemini identified ${sidewaysSymbols.length} sideways stock(s) to deactivate:`,
+        );
+        sidewaysSymbols.forEach((sym) =>
+          console.log(`  🔴 ${sym} — marked as sideways (is_active = false)`),
+        );
+      }
+    } catch (err: any) {
+      console.warn(
+        "[AI Stock Sync] Sideways stock query failed (non-blocking):",
+        err.message || err,
+      );
+      // Non-blocking — continue without sideways deactivation
+    }
+  }
+
   // Write/Sync to PostgreSQL — pure UPSERT, no deletion
   try {
     console.log(
       "[AI Stock Sync] Synchronizing stock registry into database (upsert only — no data will be deleted)...",
     );
+
+    const sidewaysSet = new Set(sidewaysSymbols.map((s) => s.toUpperCase()));
 
     let inserted = 0;
     let updated = 0;
@@ -584,15 +657,18 @@ Each object must have exactly these fields:
         [stock.symbol],
       );
 
+      // A stock in the main list is active UNLESS it's currently sideways
+      const isActive = !sidewaysSet.has(stock.symbol.toUpperCase());
+
       await query(
         `INSERT INTO stocks (symbol, name, market, is_active, category)
-         VALUES ($1, $2, $3, true, $4)
+         VALUES ($1, $2, $3, $5, $4)
          ON CONFLICT (symbol) DO UPDATE SET
            name = EXCLUDED.name,
            market = EXCLUDED.market,
-           is_active = true,
+           is_active = $5,
            category = EXCLUDED.category`,
-        [stock.symbol, stock.name, stock.market, stock.category || "core"],
+        [stock.symbol, stock.name, stock.market, stock.category || "core", isActive],
       );
 
       if (existing.rowCount && existing.rowCount > 0) {
@@ -601,6 +677,29 @@ Each object must have exactly these fields:
         inserted++;
       }
     }
+
+    // Deactivate sideways stocks that exist in DB but are NOT in the current fetchedStocks list
+    // (stocks already in fetchedStocks were handled above with isActive=false via upsert)
+    const fetchedSymbolSet = new Set(fetchedStocks.map((s) => s.symbol.toUpperCase()));
+    let deactivated = 0;
+
+    for (const sym of sidewaysSymbols) {
+      if (!fetchedSymbolSet.has(sym.toUpperCase())) {
+        // Stock is in sideways list but not in main fetch — deactivate it if it exists in DB
+        const res = await query(
+          "UPDATE stocks SET is_active = false WHERE symbol = $1 AND is_active = true",
+          [sym],
+        );
+        if (res.rowCount && res.rowCount > 0) {
+          deactivated++;
+          console.log(`  🔴 Deactivated: ${sym} (sideways, not in active list)`);
+        }
+      }
+    }
+    // Note: reactivation of previously-sideways stocks is handled automatically by the
+    // main upsert loop above — if a stock reappears in fetchedStocks and is NOT in sidewaysSet,
+    // it gets is_active = true via ON CONFLICT DO UPDATE.
+
 
     const activeCountRes = await query(
       "SELECT COUNT(*) FROM stocks WHERE is_active = true",
@@ -611,6 +710,7 @@ Each object must have exactly these fields:
     console.log(`[AI Stock Sync] Database synchronized successfully!`);
     console.log(`  ↳ Inserted (new): ${inserted} stocks`);
     console.log(`  ↳ Updated (existing): ${updated} stocks`);
+    console.log(`  ↳ Deactivated (sideways): ${deactivated} stocks`);
     console.log(`  ↳ Total active stocks: ${activeCountRes.rows[0].count}`);
     console.log(`  ↳ Swing trading candidates: ${swingCountRes.rows[0].count}`);
 
